@@ -3584,7 +3584,13 @@ div[data-youtube-video][data-align="right"] {
     padding-bottom: 48px;
   }
 
+  .masthead {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
   .brand-tag {
+    margin-top: 14px;
     font-size: 9px;
     letter-spacing: 0.16em;
   }
