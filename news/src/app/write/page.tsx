@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import ArticleForm from "@/components/ArticleForm";
+import { getSections } from "@/lib/api";
+
+export const metadata: Metadata = { title: "Write a story" };
+
+async function Form() {
+  const sections = await getSections();
+
+  if (!sections?.length) {
+    return (
+      <section className="compose">
+        <p className="kicker">Newsroom</p>
+        <h1>Write a story</h1>
+        <p className="form-note error" role="status">
+          Can&apos;t reach the news server, so the desk list is unavailable. Try again shortly.
+        </p>
+      </section>
+    );
+  }
+
+  return <ArticleForm sections={sections} />;
+}
+
+export default function WritePage() {
+  return (
+    <Suspense>
+      <Form />
+    </Suspense>
+  );
+}

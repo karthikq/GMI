@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(curl)",
+      "Exec(node)",
+      "Exec(./node_modules/.bin/eslint)"
+    ]
+  }
+}
