@@ -493,3 +493,5 @@ if ((await collections.articles.estimatedDocumentCount()) === 0) {
 app.listen(PORT, () => {
   console.log(`News API listening on http://localhost:${PORT}`);
 });
+
+export default app;

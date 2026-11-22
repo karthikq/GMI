@@ -82,8 +82,10 @@ const escapeHtml = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // Covers uploaded through the news API are stored as paths on that server;
-// absolute URLs and inline data URLs are used as-is.
-const API_URL = process.env.NEWS_API_URL || "http://localhost:4000";
+// absolute URLs and inline data URLs are used as-is. On Vercel the /uploads
+// rewrite serves them same-origin, so no base URL is needed there.
+const API_URL =
+  process.env.NEWS_API_URL ?? (process.env.VERCEL ? "" : "http://localhost:4000");
 
 function present(
   article: StoredArticle,
