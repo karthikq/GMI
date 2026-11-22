@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   createArticle,
@@ -9,6 +9,7 @@ import {
   type RelatedPick,
 } from "@/app/actions";
 import ArticleEditor from "@/components/ArticleEditor";
+import Modal from "@/components/Modal";
 import type { Section } from "@/lib/api";
 import { fileToDataUrl } from "@/lib/image";
 
@@ -112,6 +113,9 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
   const [draftFull, setDraftFull] = useState(false);
   const [restored, setRestored] = useState<number | null>(null);
   const [preview, setPreview] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -142,11 +146,13 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
     imageData,
   });
 
-  // Restore any saved draft once, after hydration.
+  // Restore any saved draft once, after hydration. The flag lives inside the
+  // timeout so StrictMode's remount (which cancels the first one) doesn't
+  // permanently block the restore.
   useEffect(() => {
-    if (restoredOnce.current) return;
-    restoredOnce.current = true;
     const handle = setTimeout(() => {
+      if (restoredOnce.current) return;
+      restoredOnce.current = true;
       const saved = readJson<Draft>(DRAFT_KEY);
       if (saved && (saved.title || saved.body?.length)) {
         setTitle(saved.title);
@@ -249,6 +255,33 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
     setDraftFull(false);
   };
 
+  // Empties every field and deletes the saved draft + revision snapshots so a
+  // cleared story doesn't reappear on refresh.
+  const clearForm = () => {
+    setTitle("");
+    setSlug("");
+    setSlugTouched(false);
+    setDek("");
+    setLead("");
+    setBlocks([]);
+    setSection("");
+    setAuthor("");
+    setCity("");
+    setTags([]);
+    setTagInput("");
+    setPublishAt("");
+    setBreaking(false);
+    setImageData(null);
+    setSeoTitle("");
+    setSeoDesc("");
+    setRelated([]);
+    setSources([]);
+    setError(null);
+    setPreview(false);
+    discardDraft();
+    setConfirmClear(false);
+  };
+
   const restoreRevision = (revision: Snapshot) => {
     setTitle(revision.title);
     setDek(revision.dek);
@@ -326,90 +359,13 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
 
   const sectionName = sections.find((s) => s.slug === section)?.name ?? section;
 
-  if (preview) {
-    const previewBody = [`<p>${lead.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`, ...blocks];
-    return (
-      <section className="cms">
-        <div className="cms-top">
-          <div>
-            <p className="kicker">Newsroom</p>
-            <h1>Preview</h1>
-          </div>
-          <div className="cms-actions">
-            <button type="button" className="button outline" onClick={() => setPreview(false)}>
-              Back to editing
-            </button>
-            <button type="button" className="button" onClick={publish} disabled={pending}>
-              {pending ? "Publishing…" : "Publish"}
-            </button>
-          </div>
-        </div>
-        {error && (
-          <p className="form-note error" role="alert">
-            {error}
-          </p>
-        )}
-        <article className="story cms-preview">
-          <header className="story-head">
-            <p className="story-kicker">
-              <span className="tag solid">{sectionName || "Desk"}</span>
-              {breaking && <span className="tag live">Breaking</span>}
-              {city}
-            </p>
-            <h1>{title || "Untitled story"}</h1>
-            <p className="dek">{dek}</p>
-            <div className="byrow">
-              <span className="avatar" aria-hidden="true">
-                {(author || "?").slice(0, 1)}
-              </span>
-              <div className="by-info">
-                <p className="by-name">By {author || "—"}</p>
-                <p className="by-meta">
-                  {city} · {Math.max(1, Math.round((wordCount + lead.split(/\s+/).filter(Boolean).length) / 60))} min read
-                </p>
-              </div>
-            </div>
-          </header>
-          {imageData && (
-            <figure className="story-cover">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageData} alt="" />
-            </figure>
-          )}
-          <div className="story-body">
-            {previewBody.map((block, index) => (
-              <div key={index} dangerouslySetInnerHTML={{ __html: block }} />
-            ))}
-            {tags.length > 0 && (
-              <ul className="story-tags" aria-label="Topics">
-                {tags.map((tag) => (
-                  <li key={tag} className="tag ink">
-                    {tag}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {sources.some((s) => s.label && s.url) && (
-              <section className="story-sources">
-                <h2>Sources</h2>
-                <ul>
-                  {sources
-                    .filter((s) => s.label && s.url)
-                    .map((source, index) => (
-                      <li key={index}>
-                        <a href={source.url} target="_blank" rel="noopener">
-                          {source.label}
-                        </a>
-                      </li>
-                    ))}
-                </ul>
-              </section>
-            )}
-          </div>
-        </article>
-      </section>
-    );
-  }
+  // Cancel only warns when there's something to lose.
+  const dirty = Boolean(
+    title.trim() || dek.trim() || lead.trim() || blocks.length || imageData,
+  );
+  const cancel = () => (dirty ? setConfirmCancel(true) : router.push("/"));
+
+  const previewBody = [`<p>${lead.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`, ...blocks];
 
   return (
     <section className="cms">
@@ -426,9 +382,12 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
           <button type="button" className="button outline" onClick={() => setPreview(true)}>
             Preview
           </button>
-          <Link href="/" className="button outline">
+          <button type="button" className="button outline" onClick={cancel}>
             Cancel
-          </Link>
+          </button>
+          <button type="button" className="button outline" onClick={() => setConfirmClear(true)}>
+            Clear
+          </button>
           <button type="button" className="button" onClick={publish} disabled={pending}>
             {pending ? "Publishing…" : "Publish"}
           </button>
@@ -799,6 +758,142 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
           </Panel>
         </aside>
       </div>
+
+      {confirmCancel && (
+        <Modal label="Discard changes" onClose={() => setConfirmCancel(false)}>
+          <div className="modal-confirm">
+            <h2>Discard your changes?</h2>
+            <p>
+              Your changes will be lost — the story hasn&apos;t been published or saved to
+              drafts.
+            </p>
+            <div className="modal-confirm-actions">
+              <button
+                type="button"
+                className="button outline"
+                onClick={() => setConfirmCancel(false)}
+              >
+                Keep editing
+              </button>
+              <button type="button" className="button danger" onClick={() => router.push("/")}>
+                Discard changes
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmClear && (
+        <Modal label="Clear story" onClose={() => setConfirmClear(false)}>
+          <div className="modal-confirm">
+            <h2>Clear everything?</h2>
+            <p>
+              This empties every field and deletes the saved draft and its
+              revision history. This can&apos;t be undone.
+            </p>
+            <div className="modal-confirm-actions">
+              <button
+                type="button"
+                className="button outline"
+                onClick={() => setConfirmClear(false)}
+              >
+                Keep editing
+              </button>
+              <button type="button" className="button danger" onClick={clearForm}>
+                Clear story
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {preview && (
+        <Modal label="Story preview" size="wide" onClose={() => setPreview(false)}>
+          <div className="modal-preview">
+            <div className="cms-top">
+              <div>
+                <p className="kicker">Newsroom</p>
+                <h1>Preview</h1>
+              </div>
+              <div className="cms-actions">
+                <button
+                  type="button"
+                  className="button outline"
+                  onClick={() => setPreview(false)}
+                >
+                  Back to editing
+                </button>
+                <button type="button" className="button" onClick={publish} disabled={pending}>
+                  {pending ? "Publishing…" : "Publish"}
+                </button>
+              </div>
+            </div>
+            {error && (
+              <p className="form-note error" role="alert">
+                {error}
+              </p>
+            )}
+            <article className="story cms-preview">
+              <header className="story-head">
+                <p className="story-kicker">
+                  <span className="tag solid">{sectionName || "Desk"}</span>
+                  {breaking && <span className="tag live">Breaking</span>}
+                  {city}
+                </p>
+                <h1>{title || "Untitled story"}</h1>
+                <p className="dek">{dek}</p>
+                <div className="byrow">
+                  <span className="avatar" aria-hidden="true">
+                    {(author || "?").slice(0, 1)}
+                  </span>
+                  <div className="by-info">
+                    <p className="by-name">By {author || "—"}</p>
+                    <p className="by-meta">
+                      {city} · {Math.max(1, Math.round((wordCount + lead.split(/\s+/).filter(Boolean).length) / 60))} min read
+                    </p>
+                  </div>
+                </div>
+              </header>
+              {imageData && (
+                <figure className="story-cover">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imageData} alt="" />
+                </figure>
+              )}
+              <div className="story-body">
+                {previewBody.map((block, index) => (
+                  <div key={index} dangerouslySetInnerHTML={{ __html: block }} />
+                ))}
+                {tags.length > 0 && (
+                  <ul className="story-tags" aria-label="Topics">
+                    {tags.map((tag) => (
+                      <li key={tag} className="tag ink">
+                        {tag}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {sources.some((s) => s.label && s.url) && (
+                  <section className="story-sources">
+                    <h2>Sources</h2>
+                    <ul>
+                      {sources
+                        .filter((s) => s.label && s.url)
+                        .map((source, index) => (
+                          <li key={index}>
+                            <a href={source.url} target="_blank" rel="noopener">
+                              {source.label}
+                            </a>
+                          </li>
+                        ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            </article>
+          </div>
+        </Modal>
+      )}
     </section>
   );
 }

@@ -48,7 +48,13 @@ export async function GET(request: NextRequest) {
           picture: profile.picture,
           googleId: profile.sub,
         },
-        $setOnInsert: { email: profile.email, createdAt: new Date() },
+        $setOnInsert: {
+          email: profile.email,
+          createdAt: new Date(),
+          role: "reader",
+          ...(profile.given_name ? { firstName: profile.given_name } : {}),
+          ...(profile.family_name ? { lastName: profile.family_name } : {}),
+        },
       },
       { upsert: true, returnDocument: "after" },
     );

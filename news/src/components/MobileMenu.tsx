@@ -5,7 +5,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Section } from "@/lib/api";
 
-export default function MobileMenu({ sections }: { sections: Section[] }) {
+export default function MobileMenu({
+  sections,
+  canWrite = false,
+}: {
+  sections: Section[];
+  canWrite?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -74,7 +80,8 @@ export default function MobileMenu({ sections }: { sections: Section[] }) {
         >
           <div className="drawer-head">
             <Link href="/" className="drawer-brand">
-              <img src="/logo.png" alt="Good Morning Indian" className="brand-logo" />
+              <img src="/logo.png" alt="Good Morning Indian" className="brand-logo logo-light" />
+              <img src="/logo-dark.png" alt="" aria-hidden="true" className="brand-logo logo-dark" />
             </Link>
             <button
               ref={closeRef}
@@ -119,9 +126,11 @@ export default function MobileMenu({ sections }: { sections: Section[] }) {
           </ul>
 
           <div className="drawer-foot">
-            <Link href="/write" className="button outline">
-              Write a story
-            </Link>
+            {canWrite && (
+              <Link href="/write" className="button outline">
+                Write a story
+              </Link>
+            )}
             <Link href="/profile" className="button outline">
               Profile
             </Link>

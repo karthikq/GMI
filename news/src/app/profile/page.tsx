@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ObjectId } from "mongodb";
 import { Suspense } from "react";
 import ArticleCard from "@/components/ArticleCard";
+import EditProfile from "@/components/EditProfile";
 import { Offline, PageSkeleton } from "@/components/States";
 import { getArticles, getSections } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
+import { profileImage } from "@/lib/avatar";
+import { fetchArticlesBySlugs } from "@/lib/queries";
+import { getReaderStats, getRecentReadSlugs, getSavedSlugs } from "@/lib/reading";
 
 export const metadata: Metadata = { title: "Your profile" };
 
@@ -43,16 +48,39 @@ function initialsOf(name: string) {
 }
 
 async function ProfileContent() {
-  const [sections, result, user] = await Promise.all([
-    getSections(),
-    getArticles({ limit: 8 }),
-    getSessionUser(),
-  ]);
-  if (!sections || !result) return <Offline />;
+  const [sections, user] = await Promise.all([getSections(), getSessionUser()]);
+  if (!sections) return <Offline />;
 
-  const saved = result.articles.slice(0, 3);
-  const history = result.articles.slice(3, 8);
-  const followed = new Set(reader.following);
+  let saved: Awaited<ReturnType<typeof fetchArticlesBySlugs>>;
+  let history: Awaited<ReturnType<typeof fetchArticlesBySlugs>>;
+  let stats: { storiesRead: number; saved: number; streak: number; desks: Set<string> };
+
+  if (user) {
+    const userId = new ObjectId(user.id);
+    const [readerStats, savedSlugs, readSlugs] = await Promise.all([
+      getReaderStats(userId),
+      getSavedSlugs(userId),
+      getRecentReadSlugs(userId),
+    ]);
+    [saved, history] = await Promise.all([
+      fetchArticlesBySlugs(savedSlugs),
+      fetchArticlesBySlugs(readSlugs),
+    ]);
+    stats = readerStats;
+  } else {
+    const result = await getArticles({ limit: 8 });
+    if (!result) return <Offline />;
+    saved = result.articles.slice(0, 3);
+    history = result.articles.slice(3, 8);
+    stats = {
+      storiesRead: reader.storiesRead,
+      saved: saved.length,
+      streak: reader.streak,
+      desks: new Set(reader.following),
+    };
+  }
+
+  const followed = stats.desks;
   const display = user
     ? {
         ...reader,
@@ -60,7 +88,7 @@ async function ProfileContent() {
         initials: initialsOf(user.name),
         email: user.email,
         memberSince: joinedFormat.format(user.createdAt),
-        plan: "Google account",
+        plan: user.role === "editorial" ? "Editorial staff" : "Google account",
         bio: "Signed in with your Google account.",
       }
     : reader;
@@ -68,9 +96,9 @@ async function ProfileContent() {
   return (
     <>
       <header className="profile-head">
-        {user?.picture ? (
+        {user ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={user.picture} alt="" className="avatar profile-avatar" />
+          <img src={profileImage(user)} alt="" className="avatar profile-avatar" />
         ) : (
           <span className="avatar profile-avatar" aria-hidden="true">
             {display.initials}
@@ -87,9 +115,15 @@ async function ProfileContent() {
           </p>
         </div>
         <div className="profile-actions">
-          <button type="button" className="button outline" disabled>
-            Edit profile
-          </button>
+          {user && (
+            <EditProfile
+              name={user.name}
+              dob={user.dob}
+              gender={user.gender}
+              avatar={user.avatar}
+              picture={user.picture}
+            />
+          )}
           {user ? (
             <a href="/auth/signout" className="button">
               Sign out
@@ -105,15 +139,15 @@ async function ProfileContent() {
       <dl className="profile-stats">
         <div>
           <dt>Stories read</dt>
-          <dd>{reader.storiesRead}</dd>
+          <dd>{stats.storiesRead}</dd>
         </div>
         <div>
           <dt>Saved</dt>
-          <dd>{saved.length}</dd>
+          <dd>{stats.saved}</dd>
         </div>
         <div>
           <dt>Day streak</dt>
-          <dd>{reader.streak}</dd>
+          <dd>{stats.streak}</dd>
         </div>
         <div>
           <dt>Desks followed</dt>
@@ -127,31 +161,41 @@ async function ProfileContent() {
             <div className="section-head">
               <h2>Saved stories</h2>
             </div>
-            <div className="grid">
-              {saved.map((article) => (
-                <ArticleCard key={article.slug} article={article} />
-              ))}
-            </div>
+            {saved.length ? (
+              <div className="grid">
+                {saved.map((article) => (
+                  <ArticleCard key={article.slug} article={article} />
+                ))}
+              </div>
+            ) : (
+              <p className="side-note">
+                Nothing saved yet — tap the bookmark on any story to keep it here.
+              </p>
+            )}
           </section>
 
           <section className="section-block">
             <div className="section-head">
               <h2>Recently read</h2>
             </div>
-            <ol className="trend">
-              {history.map((article) => (
-                <li key={article.slug}>
-                  <div>
-                    <h3>
-                      <Link href={`/article/${article.slug}`}>{article.title}</Link>
-                    </h3>
-                    <span className="kicker muted">
-                      {article.sectionName} · {article.readMinutes} min · {article.ago}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            {history.length ? (
+              <ol className="trend">
+                {history.map((article) => (
+                  <li key={article.slug}>
+                    <div>
+                      <h3>
+                        <Link href={`/article/${article.slug}`}>{article.title}</Link>
+                      </h3>
+                      <span className="kicker muted">
+                        {article.sectionName} · {article.readMinutes} min · {article.ago}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="side-note">Stories you open will show up here.</p>
+            )}
           </section>
         </div>
 

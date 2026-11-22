@@ -19,11 +19,11 @@ export default function SignInCard({ oauthError }: { oauthError?: string }) {
           {oauthError}
         </p>
       )}
-      <ProviderButtons />
-      <div className="auth-divider">
-        <span>or with email</span>
-      </div>
       {signingIn ? <SignInForm /> : <SignUpForm />}
+      <div className="auth-divider">
+        <span>or continue with</span>
+      </div>
+      <ProviderButtons />
       <p className="auth-foot">
         {signingIn ? (
           <>

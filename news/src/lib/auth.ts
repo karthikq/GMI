@@ -1,5 +1,7 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import type { ObjectId } from "mongodb";
+import { io } from "next/cache";
 import { cookies } from "next/headers";
 import { collections, connect } from "./db";
 
@@ -8,21 +10,46 @@ export const OAUTH_STATE_COOKIE = "gmi_oauth_state";
 
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+) => Promise<Buffer>;
+
+// Stored as "salt:hash" (hex).
+export async function hashPassword(password: string) {
+  const salt = randomBytes(16);
+  const hash = await scryptAsync(password, salt, 64);
+  return `${salt.toString("hex")}:${hash.toString("hex")}`;
+}
+
+export async function verifyPassword(password: string, stored: string) {
+  const [saltHex, hashHex] = stored.split(":");
+  if (!saltHex || !hashHex) return false;
+  const expected = Buffer.from(hashHex, "hex");
+  const actual = await scryptAsync(password, Buffer.from(saltHex, "hex"), expected.length);
+  return timingSafeEqual(actual, expected);
+}
+
 // Defaults to the request's origin so any dev port works; set
 // GOOGLE_REDIRECT_URI to pin it (required in Google Cloud console either way).
 export function googleRedirectUri(requestUrl: string) {
-  return (
-    process.env.GOOGLE_REDIRECT_URI ??
-    new URL("/auth/google/callback", requestUrl).toString()
-  );
+  return process.env.GOOGLE_REDIRECT_URI ?? new URL("/auth/google/callback", requestUrl).toString();
 }
 
 export type SessionUser = {
   id: string;
   email: string;
   name: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  dob?: string;
+  gender?: "male" | "female";
   picture?: string;
+  avatar?: string;
   createdAt: Date;
+  role: "reader" | "editorial";
 };
 
 const cookieOptions = (expires?: Date) => ({
@@ -40,6 +67,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!token) return null;
   try {
     await connect();
+    await io();
     const session = await collections.sessions.findOne({
       token,
       expiresAt: { $gt: new Date() },
@@ -51,8 +79,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       id: String(user._id),
       email: user.email,
       name: user.name,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      dob: user.dob,
+      gender: user.gender,
       picture: user.picture,
+      avatar: user.avatar,
       createdAt: user.createdAt,
+      role: user.role === "editorial" ? "editorial" : "reader",
     };
   } catch {
     return null;

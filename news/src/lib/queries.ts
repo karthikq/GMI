@@ -1,4 +1,6 @@
+import { io } from "next/cache";
 import type { Article, Edition, HomeData, Market, Section, TickerItem, Weather } from "./api";
+import { uploadImage } from "./cloudinary";
 import { collections, connect } from "./db";
 
 type StoredArticle = {
@@ -195,6 +197,7 @@ export async function fetchSections(): Promise<Section[]> {
 
 export async function fetchEdition(): Promise<Edition> {
   await connect();
+  await io();
   const now = new Date();
   const [stories, [market], weather] = await Promise.all([
     collections.articles.countDocuments(PUBLISHED()),
@@ -213,6 +216,7 @@ export async function fetchEdition(): Promise<Edition> {
 
 export async function fetchTicker(): Promise<TickerItem[]> {
   await connect();
+  await io();
   const items = await collections.articles
     .find(
       { $and: [PUBLISHED(), { $or: [{ tickerOrder: { $exists: true } }, { breaking: true }] }] },
@@ -229,6 +233,7 @@ export async function fetchTicker(): Promise<TickerItem[]> {
 
 export async function fetchHome(): Promise<HomeData> {
   await connect();
+  await io();
   const [sections, newest, markets] = await Promise.all([
     getSectionDocs(),
     collections.articles.find(PUBLISHED(), LIST).sort({ publishedAt: -1 }).toArray(),
@@ -281,6 +286,7 @@ export async function fetchArticles(params: {
   offset?: number;
 }): Promise<{ total: number; articles: Article[] }> {
   await connect();
+  await io();
   const limit = Math.min(params.limit || 20, 50);
   const offset = Math.max(params.offset || 0, 0);
 
@@ -302,10 +308,28 @@ export async function fetchArticles(params: {
   return { total, articles: (found as unknown as StoredArticle[]).map((a) => present(a, names)) };
 }
 
+// Fetches articles for an explicit slug list (saved stories, reading history),
+// preserving the input order. Missing slugs are dropped silently.
+export async function fetchArticlesBySlugs(slugs: string[]): Promise<Article[]> {
+  await io();
+  if (!slugs.length) return [];
+  await connect();
+  const [names, docs] = await Promise.all([
+    sectionNames(),
+    collections.articles.find({ slug: { $in: slugs } }, LIST).toArray(),
+  ]);
+  const bySlug = new Map((docs as unknown as StoredArticle[]).map((a) => [a.slug, a]));
+  return slugs
+    .map((slug) => bySlug.get(slug))
+    .filter((a): a is StoredArticle => Boolean(a))
+    .map((a) => present(a, names));
+}
+
 export async function fetchArticle(
   slug: string,
 ): Promise<{ article: Article; related: Article[] } | null> {
   await connect();
+  await io();
   const found = (await collections.articles.findOne({ slug })) as unknown as StoredArticle | null;
   if (!found) return null;
 
@@ -336,6 +360,7 @@ export async function searchArticles(
   q: string,
 ): Promise<{ slug: string; title: string; sectionName: string }[]> {
   await connect();
+  await io();
   const filter: Record<string, unknown> = { ...PUBLISHED() };
   const terms = q.split(/\s+/).filter(Boolean);
   if (terms.length) {
@@ -437,10 +462,16 @@ export async function insertArticle(
     ...(input.seo?.title?.trim() ? { title: input.seo.title.trim() } : {}),
     ...(input.seo?.description?.trim() ? { description: input.seo.description.trim() } : {}),
   };
-  const image =
-    input.image?.data && /^data:image\//.test(input.image.data) && input.image.data.length <= 12_000_000
-      ? input.image.data
-      : undefined;
+  // Featured images go to Cloudinary; the article stores the hosted URL.
+  let image: string | undefined;
+  if (input.image?.data && /^data:image\//.test(input.image.data)) {
+    if (input.image.data.length > 12_000_000) {
+      return { error: "The featured image is too large — use one under ~9 MB." };
+    }
+    const uploaded = await uploadImage(input.image.data, "gmi/articles");
+    if (!uploaded) return { error: "The featured image couldn't be uploaded. Try again." };
+    image = uploaded;
+  }
 
   const publishDate = input.publishAt ? new Date(input.publishAt) : new Date();
   const publishedAt = Number.isNaN(publishDate.getTime()) ? new Date() : publishDate;

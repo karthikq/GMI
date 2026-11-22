@@ -36,7 +36,7 @@ export default function Footer() {
       <footer className="footer">
         <div className="container footer-inner">
           <div className="footer-brand">
-            <img src="/logo.png" alt="Good Morning Indian" className="brand-logo" />
+            <img src="/logo-dark.png" alt="Good Morning Indian" className="brand-logo" />
             <p>
               An independent daily covering the world, business, technology and culture. All stories
               on this demo site are fictional.

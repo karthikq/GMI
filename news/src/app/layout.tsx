@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Archivo, Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import { Archivo, Fraunces, Inter, JetBrains_Mono, Newsreader } from "next/font/google";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import "./globals.css";
 
 const display = Fraunces({ variable: "--font-display", subsets: ["latin"] });
+const display2 = Newsreader({ variable: "--font-display", subsets: ["latin"] });
 const heading = Archivo({ variable: "--font-heading", subsets: ["latin"] });
 const sans = Inter({ variable: "--font-sans", subsets: ["latin"] });
 const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
@@ -24,7 +25,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${heading.variable} ${sans.variable} ${mono.variable}`}
+      className={`${display2.variable} ${heading.variable} ${sans.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <body id="top" suppressHydrationWarning>

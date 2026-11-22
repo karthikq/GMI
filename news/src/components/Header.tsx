@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getEdition, getSections, getTicker } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
+import { profileImage } from "@/lib/avatar";
+import AccountMenu from "./AccountMenu";
 import MobileMenu from "./MobileMenu";
 import NavLinks from "./NavLinks";
 import ThemeToggle from "./ThemeToggle";
@@ -60,22 +62,35 @@ async function AccountLink() {
   const user = await getSessionUser();
   if (!user) return <SignInLink />;
   return (
-    <Link href="/profile" className="topbar-signin" title={user.email}>
-      {user.picture ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={user.picture} alt="" className="topbar-avatar" />
-      ) : (
-        <span className="topbar-avatar topbar-initials" aria-hidden="true">
-          {user.name
-            .split(/\s+/)
-            .map((part) => part[0])
-            .slice(0, 2)
-            .join("")
-            .toUpperCase()}
-        </span>
-      )}
-      {user.name.split(/\s+/)[0]}
-    </Link>
+    <AccountMenu
+      name={user.name}
+      email={user.email}
+      image={profileImage(user)}
+      variant="topbar"
+    />
+  );
+}
+
+async function NavAvatar() {
+  const user = await getSessionUser();
+  if (!user) return null;
+  return (
+    <AccountMenu
+      name={user.name}
+      email={user.email}
+      image={profileImage(user)}
+      variant="nav"
+    />
+  );
+}
+
+async function EditorialLink() {
+  const user = await getSessionUser();
+  if (user?.role !== "editorial") return null;
+  return (
+    <li>
+      <Link href="/write">Write a story</Link>
+    </li>
   );
 }
 
@@ -85,8 +100,8 @@ async function Sections() {
 }
 
 async function MobileNav() {
-  const sections = await getSections();
-  return <MobileMenu sections={sections ?? []} />;
+  const [sections, user] = await Promise.all([getSections(), getSessionUser()]);
+  return <MobileMenu sections={sections ?? []} canWrite={user?.role === "editorial"} />;
 }
 
 async function Ticker() {
@@ -136,9 +151,9 @@ export default function Header() {
               <li>
                 <Link href="/profile">Your profile</Link>
               </li>
-              <li>
-                <Link href="/write">Write a story</Link>
-              </li>
+              <Suspense>
+                <EditorialLink />
+              </Suspense>
             </ul>
             <Suspense fallback={<SignInLink />}>
               <AccountLink />
@@ -153,7 +168,8 @@ export default function Header() {
             </Suspense>
           </div>
           <Link href="/" className="brand" aria-label="Good Morning Indian, home">
-            <img src="/logo.png" alt="Good Morning Indian" className="brand-logo" />
+            <img src="/logo.png" alt="Good Morning Indian" className="brand-logo logo-light" />
+            <img src="/logo-dark.png" alt="" aria-hidden="true" className="brand-logo logo-dark" />
             <span className="brand-tag">World · Business · Culture · Reported with care</span>
           </Link>
           <div className="masthead-meta right">
@@ -186,6 +202,9 @@ export default function Header() {
             <a href="#subscribe" className="button">
               Subscribe
             </a>
+            <Suspense>
+              <NavAvatar />
+            </Suspense>
           </div>
         </div>
       </nav>

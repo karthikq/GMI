@@ -1,4 +1,5 @@
 import { MongoClient } from "mongodb";
+import { io } from "next/cache";
 import { articles, markets, sections, tickerSlugs } from "./data";
 
 const HOUR = 60 * 60 * 1000;
@@ -16,6 +17,8 @@ export const collections = {
   subscribers: db.collection("subscribers"),
   users: db.collection("users"),
   sessions: db.collection("sessions"),
+  bookmarks: db.collection("bookmarks"),
+  reads: db.collection("reads"),
 };
 
 // Replaces sections, articles and markets with the sample data. Subscribers are kept.
@@ -46,10 +49,13 @@ async function seed() {
 
 let ready: Promise<void> | null = null;
 
-export function connect(): Promise<void> {
+export async function connect(): Promise<void> {
+  // Mark every call request-time: Mongo reads (and seed()'s Date.now) must
+  // never run inside a prerender pass. Resolves immediately at request time.
+  await io();
   ready ??= (async () => {
     await client.connect();
-    const { sections, articles, subscribers, users, sessions } = collections;
+    const { sections, articles, subscribers, users, sessions, bookmarks, reads } = collections;
     await Promise.all([
       sections.createIndex({ slug: 1 }, { unique: true }),
       articles.createIndex({ slug: 1 }, { unique: true }),
@@ -58,9 +64,21 @@ export function connect(): Promise<void> {
       articles.createIndex({ reads: -1 }),
       subscribers.createIndex({ email: 1 }, { unique: true }),
       users.createIndex({ email: 1 }, { unique: true }),
+      // Case-insensitive; Google-only accounts have no username.
+      users.createIndex(
+        { username: 1 },
+        {
+          unique: true,
+          collation: { locale: "en", strength: 2 },
+          partialFilterExpression: { username: { $type: "string" } },
+        },
+      ),
       sessions.createIndex({ token: 1 }, { unique: true }),
       // Sessions clean themselves up once they expire.
       sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+      bookmarks.createIndex({ userId: 1, slug: 1 }, { unique: true }),
+      reads.createIndex({ userId: 1, slug: 1 }, { unique: true }),
+      reads.createIndex({ userId: 1, readAt: -1 }),
     ]);
     if ((await articles.estimatedDocumentCount()) === 0) {
       const counts = await seed();

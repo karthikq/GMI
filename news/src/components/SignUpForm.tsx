@@ -9,8 +9,27 @@ export default function SignUpForm() {
   return (
     <form action={action} className="auth-form">
       <label>
+        <span>Username</span>
+        <input
+          type="text"
+          name="username"
+          required
+          minLength={2}
+          maxLength={20}
+          pattern="[A-Za-z0-9_.]+"
+          title="2–20 letters, numbers, dots or underscores"
+          autoComplete="username"
+        />
+      </label>
+      <label>
         <span>Email</span>
-        <input type="email" name="email" required autoComplete="email" placeholder="you@example.com" />
+        <input
+          type="email"
+          name="email"
+          required
+          autoComplete="email"
+          placeholder="you@example.com"
+        />
       </label>
       <label>
         <span>Password</span>

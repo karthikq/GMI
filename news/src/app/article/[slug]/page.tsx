@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ObjectId } from "mongodb";
 import { Fragment, Suspense } from "react";
 import ArticleCard, { ArticleImage } from "@/components/ArticleCard";
+import ReadTracker from "@/components/ReadTracker";
 import ReadingProgress from "@/components/ReadingProgress";
+import SaveButton from "@/components/SaveButton";
 import ShareButtons from "@/components/ShareButtons";
 import { PageSkeleton } from "@/components/States";
 import { getArticle } from "@/lib/api";
+import { getSessionUser } from "@/lib/auth";
+import { isBookmarked } from "@/lib/reading";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -35,9 +40,10 @@ const initials = (name: string) =>
 async function ArticleContent({ params, searchParams }: Props) {
   const { slug } = await params;
   const { scheduled } = await searchParams;
-  const data = await getArticle(slug);
+  const [data, user] = await Promise.all([getArticle(slug), getSessionUser()]);
   if (!data) notFound();
   const { article, related } = data;
+  const saved = user ? await isBookmarked(new ObjectId(user.id), slug) : false;
   const body = article.body ?? [];
   // Longer stories get a pull quote: the opening sentence of the closing paragraph, shown mid-story.
   const quote =
@@ -49,6 +55,7 @@ async function ArticleContent({ params, searchParams }: Props) {
   return (
     <>
       <ReadingProgress />
+      <ReadTracker slug={article.slug} section={article.section} />
       {scheduled === "1" && article.status === "scheduled" && (
         <p className="cms-note" role="status">
           This story is scheduled — it goes live on{" "}
@@ -86,6 +93,12 @@ async function ArticleContent({ params, searchParams }: Props) {
               </p>
             </div>
             <ShareButtons title={article.title} />
+            <SaveButton
+              slug={article.slug}
+              section={article.section}
+              initialSaved={saved}
+              signedIn={Boolean(user)}
+            />
           </div>
         </header>
 

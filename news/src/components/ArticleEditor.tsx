@@ -893,6 +893,14 @@ export default function ArticleEditor({
         <Btn title="Strikethrough" onClick={() => editor?.chain().focus().toggleStrike().run()} active={active("strike")}>
           <s>S</s>
         </Btn>
+        <Btn title="Inline code" onClick={() => editor?.chain().focus().toggleCode().run()} active={active("code")}>
+          <code>&lt;/&gt;</code>
+        </Btn>
+        <Btn title="Code block" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} active={active("codeBlock")}>
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path d="m8 6-6 6 6 6M16 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Btn>
         <Sep />
         <Btn title="Link" onClick={link} active={active("link")}>
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
