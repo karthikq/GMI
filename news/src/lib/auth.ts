@@ -46,6 +46,8 @@ export type SessionUser = {
   lastName?: string;
   dob?: string;
   gender?: "male" | "female";
+  country?: string;
+  state?: string;
   picture?: string;
   avatar?: string;
   createdAt: Date;
@@ -84,6 +86,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       lastName: user.lastName,
       dob: user.dob,
       gender: user.gender,
+      country: user.country,
+      state: user.state,
       picture: user.picture,
       avatar: user.avatar,
       createdAt: user.createdAt,

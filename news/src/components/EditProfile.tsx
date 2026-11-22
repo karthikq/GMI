@@ -6,6 +6,7 @@ import { signAvatarUpload, updateProfile } from "@/app/actions";
 import Modal from "@/components/Modal";
 import { NO_PHOTO, defaultAvatar } from "@/lib/avatar";
 import { fileToDataUrl } from "@/lib/image";
+import { COUNTRIES, DEFAULT_COUNTRY, INDIAN_STATES } from "@/lib/regions";
 
 const RING_RADIUS = 60;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
@@ -49,12 +50,16 @@ export default function EditProfile({
   name,
   dob,
   gender,
+  country,
+  state,
   avatar,
   picture,
 }: {
   name: string;
   dob?: string;
   gender?: string;
+  country?: string;
+  state?: string;
   avatar?: string;
   picture?: string;
 }) {
@@ -64,6 +69,8 @@ export default function EditProfile({
   const [nextName, setNextName] = useState(name);
   const [nextDob, setNextDob] = useState(dob ?? "");
   const [nextGender, setNextGender] = useState(gender ?? "");
+  const [nextCountry, setNextCountry] = useState(country ?? DEFAULT_COUNTRY);
+  const [nextState, setNextState] = useState(state ?? "");
   const [preview, setPreview] = useState<string | null>(null);
   const [nextFile, setNextFile] = useState<File | null>(null);
   const [nextPhoto, setNextPhoto] = useState<string | null>(null);
@@ -149,6 +156,8 @@ export default function EditProfile({
     setNextName(name);
     setNextDob(dob ?? "");
     setNextGender(gender ?? "");
+    setNextCountry(country ?? DEFAULT_COUNTRY);
+    setNextState(state ?? "");
     setPreview(null);
     setNextFile(null);
     setNextPhoto(null);
@@ -169,6 +178,8 @@ export default function EditProfile({
         name: nextName,
         dob: nextDob,
         gender: nextGender,
+        country: nextCountry,
+        state: nextState,
         ...(photo
           ? { avatar: photo }
           : photoChoice === "google"
@@ -308,6 +319,42 @@ export default function EditProfile({
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                   </select>
+                </label>
+                <label className="cms-field">
+                  <span className="cms-label">Country</span>
+                  <select
+                    value={nextCountry}
+                    onChange={(e) => {
+                      setNextCountry(e.target.value);
+                      setNextState("");
+                    }}
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="cms-field">
+                  <span className="cms-label">State</span>
+                  {nextCountry === DEFAULT_COUNTRY ? (
+                    <select value={nextState} onChange={(e) => setNextState(e.target.value)}>
+                      <option value="">Select state</option>
+                      {INDIAN_STATES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={nextState}
+                      maxLength={80}
+                      autoComplete="address-level1"
+                      onChange={(e) => setNextState(e.target.value)}
+                    />
+                  )}
                 </label>
                 <label className="cms-field wide">
                   <span className="cms-label">Display name</span>

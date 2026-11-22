@@ -120,6 +120,8 @@ async function ProfileContent() {
               name={user.name}
               dob={user.dob}
               gender={user.gender}
+              country={user.country}
+              state={user.state}
               avatar={user.avatar}
               picture={user.picture}
             />

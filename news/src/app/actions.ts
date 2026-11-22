@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { redirect } from "next/navigation";
 import { createSession, getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { NO_PHOTO } from "@/lib/avatar";
+import { COUNTRIES, INDIAN_STATES } from "@/lib/regions";
 import { isHostedImage, signUpload, uploadImage } from "@/lib/cloudinary";
 import { collections, connect } from "@/lib/db";
 import { recordRead, toggleBookmark } from "@/lib/reading";
@@ -204,6 +205,8 @@ export async function updateProfile(input: {
   lastName?: string;
   dob?: string;
   gender?: string;
+  country?: string;
+  state?: string;
   avatar?: string;
 }): Promise<{ message: string } | void> {
   const user = await getSessionUser();
@@ -248,6 +251,24 @@ export async function updateProfile(input: {
       update.gender = input.gender;
     } else {
       return { message: "Choose a valid gender option." };
+    }
+  }
+
+  if (typeof input.country === "string") {
+    const country = input.country.trim();
+    if (!COUNTRIES.includes(country)) return { message: "Choose a valid country." };
+    update.country = country;
+
+    const state = String(input.state ?? "").trim();
+    if (!state) {
+      unset.state = "";
+    } else if (
+      state.length > 80 ||
+      (country === "India" && !INDIAN_STATES.includes(state))
+    ) {
+      return { message: "Choose a valid state." };
+    } else {
+      update.state = state;
     }
   }
 
