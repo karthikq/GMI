@@ -1,10 +1,10 @@
 export function Offline() {
   return (
     <div className="notice">
-      <h1>We can&apos;t reach the news server</h1>
+      <h1>We can&apos;t reach the content store</h1>
       <p>
-        Start the backend with <code>npm run dev</code> in the <code>server</code> folder, then
-        reload this page.
+        The database connection failed — check <code>MONGODB_URI</code> is set in the deployed
+        environment and that MongoDB Atlas allows connections from this host, then reload.
       </p>
     </div>
   );

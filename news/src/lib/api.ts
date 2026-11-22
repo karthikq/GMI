@@ -71,11 +71,14 @@ export type HomeData = {
 };
 
 // Returns null when the database is unreachable or the query fails.
+// The real error is logged so Vercel/runtime logs show the actual cause —
+// the Offline screen alone makes Mongo failures look like API outages.
 async function get<T>(run: () => Promise<T>): Promise<T | null> {
   await connection();
   try {
     return await run();
-  } catch {
+  } catch (error) {
+    console.error("[news] content query failed:", error);
     return null;
   }
 }
