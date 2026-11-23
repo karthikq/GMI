@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import ArticleCard, { ArticleImage, Meta } from "@/components/ArticleCard";
+import ScrollReveal from "@/components/ScrollReveal";
 import { Offline, PageSkeleton } from "@/components/States";
 import ArchiveSection from "@/components/ArchiveSection";
 import { getArticles, getHome, type Article } from "@/lib/api";
@@ -249,9 +250,23 @@ async function HomeContent() {
           </div>
         </section>
       )}
+
+      <ScrollReveal selector={REVEAL_TARGETS} />
     </>
   );
 }
+
+const REVEAL_TARGETS = [
+  ".front-briefs > *",
+  ".front .lead",
+  ".band .section-head",
+  ".grid.four > *",
+  ".desk",
+  ".side-block",
+  ".op-grid > *",
+  ".section-block .section-head",
+  ".gallery > *",
+].join(", ");
 
 export default function Home() {
   return (
