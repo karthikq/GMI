@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { signOutUser } from "@/app/actions";
+import AvatarImg from "./AvatarImg";
 
 type AccountMenuProps = {
   name: string;
@@ -32,8 +34,7 @@ export default function AccountMenu({ name, email, image, variant }: AccountMenu
 
   const avatarClass = variant === "nav" ? "nav-avatar-img" : "topbar-avatar";
   const avatar = image ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={image} alt="" className={avatarClass} />
+    <AvatarImg src={image} className={avatarClass} />
   ) : (
     <span className={`${avatarClass} topbar-initials`} aria-hidden="true">
       {name
@@ -74,9 +75,11 @@ export default function AccountMenu({ name, email, image, variant }: AccountMenu
           <Link href="/profile" className="account-menu-item" role="menuitem" onClick={() => setOpen(false)}>
             Your profile
           </Link>
-          <a href="/auth/signout" className="account-menu-item" role="menuitem">
-            Sign out
-          </a>
+          <form action={signOutUser}>
+            <button type="submit" className="account-menu-item" role="menuitem">
+              Sign out
+            </button>
+          </form>
         </div>
       )}
     </div>

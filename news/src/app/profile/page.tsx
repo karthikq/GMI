@@ -3,11 +3,14 @@ import Link from "next/link";
 import { ObjectId } from "mongodb";
 import { Suspense } from "react";
 import ArticleCard from "@/components/ArticleCard";
-import EditProfile from "@/components/EditProfile";
+import AvatarImg from "@/components/AvatarImg";
+import InviteForm from "@/components/InviteForm";
 import { Offline, PageSkeleton } from "@/components/States";
+import { signOutUser } from "@/app/actions";
 import { getArticles, getSections } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { profileImage } from "@/lib/avatar";
+import { isEditorial } from "@/lib/roles";
 import { fetchArticlesBySlugs } from "@/lib/queries";
 import { getReaderStats, getRecentReadSlugs, getSavedSlugs } from "@/lib/reading";
 
@@ -88,8 +91,14 @@ async function ProfileContent() {
         initials: initialsOf(user.name),
         email: user.email,
         memberSince: joinedFormat.format(user.createdAt),
-        plan: user.role === "editorial" ? "Editorial staff" : "Google account",
-        bio: "Signed in with your Google account.",
+        plan: isEditorial(user.role)
+          ? user.role[0].toUpperCase() + user.role.slice(1)
+          : user.googleId
+            ? "Google account"
+            : "Reader account",
+        bio: user.googleId
+          ? "Signed in with your Google account."
+          : "Signed in with your email and password.",
       }
     : reader;
 
@@ -97,8 +106,7 @@ async function ProfileContent() {
     <>
       <header className="profile-head">
         {user ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={profileImage(user)} alt="" className="avatar profile-avatar" />
+          <AvatarImg src={profileImage(user)} className="avatar profile-avatar" />
         ) : (
           <span className="avatar profile-avatar" aria-hidden="true">
             {display.initials}
@@ -116,20 +124,16 @@ async function ProfileContent() {
         </div>
         <div className="profile-actions">
           {user && (
-            <EditProfile
-              name={user.name}
-              dob={user.dob}
-              gender={user.gender}
-              country={user.country}
-              state={user.state}
-              avatar={user.avatar}
-              picture={user.picture}
-            />
+            <Link href="/profile/edit" className="button outline">
+              Edit profile
+            </Link>
           )}
           {user ? (
-            <a href="/auth/signout" className="button">
-              Sign out
-            </a>
+            <form action={signOutUser}>
+              <button type="submit" className="button">
+                Sign out
+              </button>
+            </form>
           ) : (
             <Link href="/signin" className="button">
               Sign in
@@ -202,6 +206,13 @@ async function ProfileContent() {
         </div>
 
         <aside className="sidebar">
+          {user?.role === "admin" && (
+            <section className="side-block">
+              <h2 className="rule-heading">Invite to the newsroom</h2>
+              <InviteForm />
+            </section>
+          )}
+
           <section className="side-block">
             <h2 className="rule-heading">Desks you follow</h2>
             <ul className="profile-desks">

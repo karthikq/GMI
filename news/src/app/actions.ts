@@ -2,11 +2,16 @@
 
 import { ObjectId } from "mongodb";
 import { redirect } from "next/navigation";
-import { createSession, getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
+import { signIn as naSignIn, signOut as naSignOut } from "@/auth";
+import { getSessionUser } from "@/lib/auth";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import { NO_PHOTO } from "@/lib/avatar";
 import { COUNTRIES, INDIAN_STATES } from "@/lib/regions";
 import { isHostedImage, signUpload, uploadImage } from "@/lib/cloudinary";
 import { collections, connect } from "@/lib/db";
+import { sendWelcomeEmail } from "@/lib/email";
+import { PLANS } from "@/lib/plans";
+import { INVITABLE_ROLES, isEditorial, type Role } from "@/lib/roles";
 import { recordRead, toggleBookmark } from "@/lib/reading";
 import {
   insertArticle,
@@ -17,7 +22,11 @@ import type { ArticleInput } from "@/lib/queries";
 
 export type { ArticleInput };
 export type RelatedPick = { slug: string; title: string; sectionName: string };
-export type FormState = { ok: boolean; message: string } | null;
+export type FormState = {
+  ok: boolean;
+  message: string;
+  errors?: Record<string, string>;
+} | null;
 
 export async function subscribe(_previous: FormState, formData: FormData): Promise<FormState> {
   try {
@@ -37,46 +46,70 @@ export async function subscribe(_previous: FormState, formData: FormData): Promi
   }
 }
 
+// Saves the reader's chosen plan; signed-out readers go to sign in first.
+export async function choosePlan(formData: FormData): Promise<void> {
+  const plan = String(formData.get("plan") ?? "");
+  if (!PLANS.some((p) => p.id === plan)) return;
+  const user = await getSessionUser();
+  if (!user) redirect("/signin");
+  await connect();
+  const update: Record<string, unknown> = { plan, planSince: new Date() };
+  // A paid plan makes a reader a subscriber; editorial roles are untouched.
+  if (!isEditorial(user.role)) update.role = plan === "free" ? "reader" : "subscriber";
+  await collections.users.updateOne({ _id: new ObjectId(user.id) }, { $set: update });
+  redirect("/subscribe");
+}
+
 export async function signIn(_previous: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
   if (!/^\S+@\S+\.\S+$/.test(email)) {
-    return { ok: false, message: "Enter a valid email address." };
+    return { ok: false, message: "", errors: { email: "Enter a valid email address." } };
   }
   try {
     await connect();
     const user = await collections.users.findOne({ email });
-    if (user && !user.passwordHash) {
+    if (!user) {
+      return { ok: false, message: "", errors: { email: "No account uses this email yet." } };
+    }
+    if (!user.passwordHash) {
       return {
         ok: false,
-        message: "This account uses Google sign-in. Continue with Google instead.",
+        message: "",
+        errors: { email: "This account uses Google sign-in. Continue with Google instead." },
       };
     }
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
-      return { ok: false, message: "Incorrect email or password." };
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      return { ok: false, message: "", errors: { password: "Incorrect password." } };
     }
-    await createSession(user._id);
   } catch {
-    return {
-      ok: false,
-      message: "Can't reach the news server. Try again shortly.",
-    };
+    return { ok: false, message: "Can't reach the news server. Try again shortly." };
   }
-  redirect("/");
+  // The actual sign-in happens client-side (next-auth/react) so the session
+  // cookie is set on a real navigation — a server-action redirect leaves the
+  // intercepted sign-in modal mounted.
+  return { ok: true, message: "Signing you in…" };
 }
 
 export async function signInWithProvider(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const provider = formData.get("provider") === "apple" ? "Apple" : "Google";
-  // OAuth credentials aren't configured yet, so the attempt is declined politely.
+  if (formData.get("provider") !== "apple") {
+    await naSignIn("google", { redirectTo: "/" });
+    return null;
+  }
+  // Apple sign-in isn't configured yet, so the attempt is declined politely.
   return {
     ok: false,
-    message: `${provider} sign-in isn't connected yet. Until then, the daily briefing is free to everyone.`,
+    message: "Apple sign-in isn't connected yet. Until then, the daily briefing is free to everyone.",
   };
+}
+
+export async function signOutUser(): Promise<void> {
+  await naSignOut({ redirectTo: "/" });
 }
 
 export async function signUp(_previous: FormState, formData: FormData): Promise<FormState> {
@@ -86,27 +119,27 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
+  const errors: Record<string, string> = {};
   if (username.length < 2 || username.length > 20) {
-    return { ok: false, message: "Username must be 2–20 characters." };
-  }
-  if (!/^[A-Za-z0-9_.]+$/.test(username)) {
-    return {
-      ok: false,
-      message: "Username can only use letters, numbers, dots and underscores.",
-    };
+    errors.username = "Username must be 2–20 characters.";
+  } else if (!/^[A-Za-z0-9_.]+$/.test(username)) {
+    errors.username = "Username can only use letters, numbers, dots and underscores.";
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) {
-    return { ok: false, message: "Enter a valid email address." };
+    errors.email = "Enter a valid email address.";
   }
   if (password.length < 8) {
-    return { ok: false, message: "Password must be at least 8 characters." };
+    errors.password = "Password must be at least 8 characters.";
   }
   if (password !== confirm) {
-    return { ok: false, message: "Passwords don't match." };
+    errors.confirm = "Passwords don't match.";
+  }
+  if (Object.keys(errors).length) {
+    return { ok: false, message: "", errors };
   }
   try {
     await connect();
-    const { insertedId } = await collections.users.insertOne({
+    await collections.users.insertOne({
       email,
       username,
       name: username,
@@ -114,16 +147,16 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
       createdAt: new Date(),
       role: "reader",
     });
-    await createSession(insertedId);
   } catch (error) {
     const dup = (error as { code?: number; keyPattern?: Record<string, unknown> })?.code === 11000;
     if (dup) {
       const field = (error as { keyPattern?: Record<string, unknown> }).keyPattern;
       return field && "username" in field
-        ? { ok: false, message: "That username is taken." }
+        ? { ok: false, message: "", errors: { username: "That username is taken." } }
         : {
             ok: false,
-            message: "An account with this email already exists. Sign in instead.",
+            message: "",
+            errors: { email: "An account with this email already exists. Sign in instead." },
           };
     }
     return {
@@ -131,7 +164,50 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
       message: "Can't reach the news server. Try again shortly.",
     };
   }
-  redirect("/");
+  try {
+    await sendWelcomeEmail(email, username);
+  } catch {}
+  // Client completes the credentials sign-in; see note in signIn.
+  return { ok: true, message: "Signing you in…" };
+}
+
+// Admins invite journalists and editors by email; the role is assigned when
+// the invited person next registers or signs in (see claimInvite).
+export async function inviteEditorial(_previous: FormState, formData: FormData): Promise<FormState> {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") {
+    return { ok: false, message: "Only admins can send newsroom invitations." };
+  }
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const role = String(formData.get("role") ?? "");
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    return { ok: false, message: "Enter a valid email address." };
+  }
+  if (!INVITABLE_ROLES.includes(role as Role)) {
+    return { ok: false, message: "Choose a valid role." };
+  }
+  try {
+    await collections.invites.updateOne(
+      { email },
+      {
+        $set: {
+          role,
+          invitedBy: new ObjectId(user.id),
+          createdAt: new Date(),
+          claimedAt: null,
+        },
+      },
+      { upsert: true },
+    );
+  } catch {
+    return { ok: false, message: "Couldn't save the invitation. Try again." };
+  }
+  return {
+    ok: true,
+    message: `${email} will get ${role} access next time they sign in or register.`,
+  };
 }
 
 // Toggles a story in the signed-in reader's saved list. Guests get an error
@@ -170,7 +246,7 @@ export async function searchArticles(query: string): Promise<RelatedPick[]> {
 
 export async function createArticle(input: ArticleInput): Promise<{ message: string } | void> {
   const user = await getSessionUser();
-  if (user?.role !== "editorial") {
+  if (!isEditorial(user?.role)) {
     return { message: "Only editorial staff can publish stories." };
   }
   let result: { slug: string; scheduled: boolean };

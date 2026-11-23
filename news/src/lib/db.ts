@@ -19,6 +19,7 @@ export const collections = {
   sessions: db.collection("sessions"),
   bookmarks: db.collection("bookmarks"),
   reads: db.collection("reads"),
+  invites: db.collection("invites"),
 };
 
 // Replaces sections, articles and markets with the sample data. Subscribers are kept.
@@ -55,7 +56,7 @@ export async function connect(): Promise<void> {
   await io();
   ready ??= (async () => {
     await client.connect();
-    const { sections, articles, subscribers, users, sessions, bookmarks, reads } = collections;
+    const { sections, articles, subscribers, users, sessions, bookmarks, reads, invites } = collections;
     await Promise.all([
       sections.createIndex({ slug: 1 }, { unique: true }),
       articles.createIndex({ slug: 1 }, { unique: true }),
@@ -79,6 +80,7 @@ export async function connect(): Promise<void> {
       bookmarks.createIndex({ userId: 1, slug: 1 }, { unique: true }),
       reads.createIndex({ userId: 1, slug: 1 }, { unique: true }),
       reads.createIndex({ userId: 1, readAt: -1 }),
+      invites.createIndex({ email: 1 }, { unique: true }),
     ]);
     if ((await articles.estimatedDocumentCount()) === 0) {
       const counts = await seed();

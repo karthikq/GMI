@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import ArticleCard, { ArticleImage, Meta } from "@/components/ArticleCard";
 import { Offline, PageSkeleton } from "@/components/States";
-import { getHome, type Article } from "@/lib/api";
+import ArchiveSection from "@/components/ArchiveSection";
+import { getArticles, getHome, type Article } from "@/lib/api";
 
 const initials = (name: string) =>
   name
@@ -26,7 +27,7 @@ function Columnist({ article }: { article: Article }) {
 }
 
 async function HomeContent() {
-  const home = await getHome();
+  const [home, archive] = await Promise.all([getHome(), getArticles({ olderThanDays: 7, limit: 4 })]);
   if (!home) return <Offline />;
   const { lead, briefs, top, across, desks, mostRead, markets, opinion, pictures } = home;
   const [topFeature, ...topRest] = top;
@@ -87,6 +88,8 @@ async function HomeContent() {
           </div>
         </section>
       )}
+
+      <ArchiveSection initial={archive?.articles ?? []} />
 
       <div className="interior">
         <div className="desks">

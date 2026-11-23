@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { getEdition, getSections, getTicker } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { profileImage } from "@/lib/avatar";
+import { isEditorial } from "@/lib/roles";
 import AccountMenu from "./AccountMenu";
 import MobileMenu from "./MobileMenu";
 import NavLinks from "./NavLinks";
@@ -86,7 +87,7 @@ async function NavAvatar() {
 
 async function EditorialLink() {
   const user = await getSessionUser();
-  if (user?.role !== "editorial") return null;
+  if (!isEditorial(user?.role)) return null;
   return (
     <li>
       <Link href="/write">Write a story</Link>
@@ -101,7 +102,7 @@ async function Sections() {
 
 async function MobileNav() {
   const [sections, user] = await Promise.all([getSections(), getSessionUser()]);
-  return <MobileMenu sections={sections ?? []} canWrite={user?.role === "editorial"} />;
+  return <MobileMenu sections={sections ?? []} canWrite={isEditorial(user?.role)} />;
 }
 
 async function Ticker() {
@@ -168,7 +169,9 @@ export default function Header() {
             </Suspense>
           </div>
           <Link href="/" className="brand" aria-label="Good Morning Indian, home">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="Good Morning Indian" className="brand-logo logo-light" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-dark.png" alt="" aria-hidden="true" className="brand-logo logo-dark" />
             <span className="brand-tag">World · Business · Culture · Reported with care</span>
           </Link>
@@ -199,9 +202,9 @@ export default function Header() {
               </button>
             </form>
             <ThemeToggle />
-            <a href="#subscribe" className="button">
+            <Link href="/subscribe" className="button">
               Subscribe
-            </a>
+            </Link>
             <Suspense>
               <NavAvatar />
             </Suspense>

@@ -90,6 +90,12 @@ export const getHome = () => get(fetchHome);
 
 export const getArticle = (slug: string) => get(() => fetchArticle(slug));
 
-export function getArticles(params: { section?: string; q?: string; limit?: number }) {
+export function getArticles(params: {
+  section?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+  olderThanDays?: number;
+}) {
   return get(() => fetchArticles(params));
 }

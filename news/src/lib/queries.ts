@@ -284,6 +284,7 @@ export async function fetchArticles(params: {
   q?: string;
   limit?: number;
   offset?: number;
+  olderThanDays?: number;
 }): Promise<{ total: number; articles: Article[] }> {
   await connect();
   await io();
@@ -292,6 +293,11 @@ export async function fetchArticles(params: {
 
   const filter: Record<string, unknown> = { ...PUBLISHED() };
   if (params.section) filter.section = String(params.section);
+  if (params.olderThanDays && params.olderThanDays > 0) {
+    filter.publishedAt = {
+      $lte: new Date(Date.now() - params.olderThanDays * 24 * HOUR),
+    };
+  }
   const terms = params.q ? String(params.q).split(/\s+/).filter(Boolean) : [];
   // Every term must appear somewhere in the story, matching the old substring search.
   if (terms.length) {

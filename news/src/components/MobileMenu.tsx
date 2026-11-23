@@ -137,9 +137,9 @@ export default function MobileMenu({
             <Link href="/signin" className="button outline">
               Sign in
             </Link>
-            <a href="#subscribe" className="button">
+            <Link href="/subscribe" className="button">
               Subscribe
-            </a>
+            </Link>
           </div>
         </aside>
       </div>

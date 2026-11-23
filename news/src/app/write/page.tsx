@@ -4,13 +4,14 @@ import { Suspense } from "react";
 import ArticleForm from "@/components/ArticleForm";
 import { getSections } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
+import { isEditorial } from "@/lib/roles";
 
 export const metadata: Metadata = { title: "Write a story" };
 
 async function Form() {
   const [sections, user] = await Promise.all([getSections(), getSessionUser()]);
 
-  if (user?.role !== "editorial") {
+  if (!isEditorial(user?.role)) {
     return (
       <section className="compose">
         <p className="kicker">Newsroom</p>
