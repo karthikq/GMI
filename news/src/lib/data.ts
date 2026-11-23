@@ -7,6 +7,8 @@ export const sections = [
   { slug: "opinion", name: "Opinion", blurb: "Arguments and ideas from our columnists." },
   { slug: "in-pictures", name: "In Pictures", blurb: "The week, seen through our photographers' lenses." },
   { slug: "longform", name: "Longform", blurb: "Stories that take their time." },
+  { slug: "economy", name: "Economy", blurb: "Growth, jobs, prices and the policy behind them." },
+  { slug: "gaming", name: "Gaming", blurb: "Consoles, PC, esports and the studios making them." },
 ];
 
 const slugify = (title: string) =>

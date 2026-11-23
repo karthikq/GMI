@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ObjectId } from "mongodb";
 import { Fragment, Suspense } from "react";
 import ArticleCard, { ArticleImage } from "@/components/ArticleCard";
+import DeleteArticleButton from "@/components/DeleteArticleButton";
 import ReadTracker from "@/components/ReadTracker";
 import ReadingProgress from "@/components/ReadingProgress";
 import SaveButton from "@/components/SaveButton";
@@ -42,7 +43,8 @@ async function ArticleContent({ params, searchParams }: Props) {
   const { scheduled } = await searchParams;
   const [data, user] = await Promise.all([getArticle(slug), getSessionUser()]);
   if (!data) notFound();
-  const { article, related } = data;
+  const { article, related, ownerId } = data;
+  const isOwner = Boolean(user && ownerId && ownerId === user.id);
   const saved = user ? await isBookmarked(new ObjectId(user.id), slug) : false;
   const body = article.body ?? [];
   // Longer stories get a pull quote: the opening sentence of the closing paragraph, shown mid-story.
@@ -100,6 +102,14 @@ async function ArticleContent({ params, searchParams }: Props) {
               signedIn={Boolean(user)}
             />
           </div>
+          {isOwner && (
+            <div className="owner-actions">
+              <Link href={`/article/${article.slug}/edit`} className="button outline">
+                Edit story
+              </Link>
+              <DeleteArticleButton slug={article.slug} />
+            </div>
+          )}
         </header>
 
         <figure className="story-cover">

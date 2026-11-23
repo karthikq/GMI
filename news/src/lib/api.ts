@@ -3,6 +3,7 @@ import type { MarketRange } from "./markets";
 import {
   fetchArticle,
   fetchArticles,
+  fetchEditableArticle,
   fetchEdition,
   fetchHome,
   fetchMarketDetail,
@@ -60,6 +61,23 @@ export type Edition = {
 
 export type TickerItem = { slug: string; title: string; time: string };
 
+export type EditableArticle = {
+  slug: string;
+  title: string;
+  dek: string;
+  lead: string;
+  body: string[];
+  section: string;
+  author: string;
+  city: string;
+  tags: string[];
+  sources: { label: string; url: string }[];
+  related: { slug: string; title: string; sectionName: string }[];
+  seo: { title?: string; description?: string };
+  breaking: boolean;
+  image: string | null;
+};
+
 export type Market = { name: string; value: string; change: number };
 
 export type MarketView = Market & {
@@ -75,7 +93,7 @@ export type MarketDetail = {
   symbol: string;
   commodity: boolean;
   currency: string;
-  value: string;
+  price: number;
   delta: number;
   change: number;
   previousClose: number;
@@ -88,6 +106,7 @@ export type MarketDetail = {
   updated: number;
   range: MarketRange;
   points: { t: number; c: number; v: number | null }[];
+  inrRate: number | null;
 };
 
 export type HomeData = {
@@ -124,6 +143,7 @@ export const getMarketDetail = (slug: string, range: MarketRange) => get(() => f
 export const getHome = () => get(fetchHome);
 
 export const getArticle = (slug: string) => get(() => fetchArticle(slug));
+export const getEditableArticle = (slug: string, userId: string) => get(() => fetchEditableArticle(slug, userId));
 
 export function getArticles(params: {
   section?: string;

@@ -19,7 +19,7 @@ import { Youtube, getEmbedUrlFromYoutubeUrl, isValidYoutubeUrl } from "@tiptap/e
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { fileToDataUrl } from "@/lib/image";
+import { uploadArticleImage } from "@/lib/image";
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ");
 
@@ -110,7 +110,12 @@ async function readImageFile(file: File | undefined) {
     window.alert("Choose an image under 20 MB.");
     return null;
   }
-  return { src: await fileToDataUrl(file), alt: file.name.replace(/\.[^.]+$/, "") };
+  try {
+    return { src: await uploadArticleImage(file), alt: file.name.replace(/\.[^.]+$/, "") };
+  } catch (err) {
+    window.alert(err instanceof Error ? err.message : "The image couldn't be uploaded. Try again.");
+    return null;
+  }
 }
 
 const promptYoutubeUrl = () => {

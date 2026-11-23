@@ -1,3 +1,21 @@
+import { signArticleUpload } from "@/app/actions";
+
+// Uploads a story image straight to Cloudinary and returns its hosted URL.
+export async function uploadArticleImage(file: File): Promise<string> {
+  const signed = await signArticleUpload();
+  if ("message" in signed) throw new Error(signed.message);
+  const body = new FormData();
+  body.append("file", file);
+  body.append("api_key", signed.apiKey);
+  body.append("folder", signed.folder);
+  body.append("timestamp", String(signed.timestamp));
+  body.append("signature", signed.signature);
+  const res = await fetch(signed.url, { method: "POST", body });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.secure_url) throw new Error("The image couldn't be uploaded. Try again.");
+  return json.secure_url as string;
+}
+
 const readFile = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();

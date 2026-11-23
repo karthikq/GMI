@@ -1748,6 +1748,85 @@ a.tag.solid:hover {
   gap: 10px;
 }
 
+.dash-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 200px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dash-bar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+
+.dash-bar i {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  background: var(--accent);
+}
+
+.dash-bar small {
+  margin-top: 6px;
+  font: 11px var(--font-mono), monospace;
+  color: var(--ink-mute);
+}
+
+.dash-desks li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dash-track {
+  display: block;
+  height: 8px;
+  background: var(--band);
+}
+
+.dash-track i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 1000;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 14px 20px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+  cursor: pointer;
+}
+
+.owner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
 .button.danger {
   border-color: var(--live);
   background: var(--live);
@@ -2053,6 +2132,28 @@ a.tag.solid:hover {
 .market-back {
   display: inline-block;
   margin-bottom: 18px;
+}
+
+.currency-toggle {
+  display: inline-flex;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.currency-toggle button {
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-mute);
+  font: 12px var(--font-mono), monospace;
+  cursor: pointer;
+}
+
+.currency-toggle button.current {
+  background: var(--ink);
+  color: var(--surface);
 }
 
 .quote-head h1 {

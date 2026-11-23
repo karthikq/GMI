@@ -5,13 +5,15 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import {
   createArticle,
   searchArticles,
+  updateStory,
   type ArticleInput,
   type RelatedPick,
 } from "@/app/actions";
 import ArticleEditor from "@/components/ArticleEditor";
 import Modal from "@/components/Modal";
-import type { Section } from "@/lib/api";
-import { fileToDataUrl } from "@/lib/image";
+import { ADULT_WORDS_MESSAGE, hasAdultWords } from "@/lib/censor";
+import type { EditableArticle, Section } from "@/lib/api";
+import { uploadArticleImage } from "@/lib/image";
 
 const DRAFT_KEY = "meridian-cms-draft";
 const REVISIONS_KEY = "meridian-cms-revisions";
@@ -88,25 +90,28 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-export default function ArticleForm({ sections }: { sections: Section[] }) {
-  const [title, setTitle] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugTouched, setSlugTouched] = useState(false);
-  const [dek, setDek] = useState("");
-  const [lead, setLead] = useState("");
-  const [blocks, setBlocks] = useState<string[]>([]);
-  const [section, setSection] = useState("");
-  const [author, setAuthor] = useState("");
-  const [city, setCity] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+// With `initial` the form edits an existing story: it starts from the stored
+// values and never touches the new-story draft in localStorage.
+export default function ArticleForm({ sections, initial }: { sections: Section[]; initial?: EditableArticle }) {
+  const editing = Boolean(initial);
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [slug, setSlug] = useState(initial?.slug ?? "");
+  const [slugTouched, setSlugTouched] = useState(editing);
+  const [dek, setDek] = useState(initial?.dek ?? "");
+  const [lead, setLead] = useState(initial?.lead ?? "");
+  const [blocks, setBlocks] = useState<string[]>(initial?.body ?? []);
+  const [section, setSection] = useState(initial?.section ?? "");
+  const [author, setAuthor] = useState(initial?.author ?? "");
+  const [city, setCity] = useState(initial?.city ?? "");
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
   const [publishAt, setPublishAt] = useState("");
-  const [breaking, setBreaking] = useState(false);
-  const [imageData, setImageData] = useState<string | null>(null);
-  const [seoTitle, setSeoTitle] = useState("");
-  const [seoDesc, setSeoDesc] = useState("");
-  const [related, setRelated] = useState<RelatedPick[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
+  const [breaking, setBreaking] = useState(initial?.breaking ?? false);
+  const [imageData, setImageData] = useState<string | null>(initial?.image ?? null);
+  const [seoTitle, setSeoTitle] = useState(initial?.seo.title ?? "");
+  const [seoDesc, setSeoDesc] = useState(initial?.seo.description ?? "");
+  const [related, setRelated] = useState<RelatedPick[]>(initial?.related ?? []);
+  const [sources, setSources] = useState<Source[]>(initial?.sources ?? []);
 
   const [revisions, setRevisions] = useState<Snapshot[]>([]);
   const [autosavedAt, setAutosavedAt] = useState<Date | null>(null);
@@ -118,6 +123,12 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const handle = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(handle);
+  }, [toast]);
 
   const [picks, setPicks] = useState<RelatedPick[]>([]);
   const [pickQuery, setPickQuery] = useState("");
@@ -153,7 +164,7 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
     const handle = setTimeout(() => {
       if (restoredOnce.current) return;
       restoredOnce.current = true;
-      const saved = readJson<Draft>(DRAFT_KEY);
+      const saved = editing ? null : readJson<Draft>(DRAFT_KEY);
       if (saved && (saved.title || saved.body?.length)) {
         setTitle(saved.title);
         setSlug(saved.slug);
@@ -177,7 +188,7 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
       setRevisions(readJson<Snapshot[]>(REVISIONS_KEY) ?? []);
     }, 0);
     return () => clearTimeout(handle);
-  }, []);
+  }, [editing]);
 
   // Drops the oldest snapshots until the list fits localStorage.
   const storeRevisions = (snapshot: Snapshot) =>
@@ -194,7 +205,7 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
 
   // Debounced autosave: the current draft plus a dated revision snapshot.
   useEffect(() => {
-    if (!restoredOnce.current) return;
+    if (!restoredOnce.current || editing) return;
     const handle = setTimeout(() => {
       if (!title && !blocks.length && !dek && !lead) return;
       const draft = currentDraft();
@@ -307,7 +318,11 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
       return;
     }
     setError(null);
-    setImageData(await fileToDataUrl(file));
+    try {
+      setImageData(await uploadArticleImage(file));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The image couldn't be uploaded. Try again.");
+    }
   };
 
   const wordCount = stripHtml(blocks.join(" ")).split(/\s+/).filter(Boolean).length;
@@ -324,13 +339,17 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
   };
 
   const publish = () => {
+    if (hasAdultWords([title, dek, lead, ...blocks, ...tags, seoTitle, seoDesc].join(" "))) {
+      setToast(ADULT_WORDS_MESSAGE);
+      return;
+    }
     const problem = validate();
     if (problem) {
       setError(problem);
       return;
     }
     setError(null);
-    discardDraft();
+    if (!editing) discardDraft();
     const payload: ArticleInput = {
       title: title.trim(),
       slug: slug.trim() || undefined,
@@ -349,11 +368,12 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
       },
       breaking,
       publishAt: publishAt || null,
-      image: imageData ? { data: imageData } : null,
+      // An unchanged image is left out so the update keeps the stored one.
+      image: imageData === (initial?.image ?? null) ? undefined : imageData ? { data: imageData } : null,
     };
     startTransition(async () => {
-      const result = await createArticle(payload);
-      if (result?.message) setError(result.message);
+      const result = initial ? await updateStory(initial.slug, payload) : await createArticle(payload);
+      if (result?.message) setToast(result.message);
     });
   };
 
@@ -363,33 +383,45 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
   const dirty = Boolean(
     title.trim() || dek.trim() || lead.trim() || blocks.length || imageData,
   );
-  const cancel = () => (dirty ? setConfirmCancel(true) : router.push("/"));
+  const exitTo = initial ? `/article/${initial.slug}` : "/";
+  const cancel = () => (dirty ? setConfirmCancel(true) : router.push(exitTo));
+  const submitLabel = editing ? "Save changes" : "Publish";
+  const busyLabel = editing ? "Saving…" : "Publishing…";
 
   const previewBody = [`<p>${lead.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`, ...blocks];
 
   return (
     <section className="cms">
+      {toast && (
+        <div className="toast" role="alert" onClick={() => setToast(null)}>
+          {toast}
+        </div>
+      )}
       <div className="cms-top">
         <div>
           <p className="kicker">Newsroom</p>
-          <h1>Article page</h1>
+          <h1>{editing ? "Edit story" : "Article page"}</h1>
         </div>
         <div className="cms-actions">
           {autosavedAt && <span className="cms-saved">Saved {timeLabel(autosavedAt.getTime())}</span>}
-          <button type="button" className="button outline" onClick={saveDraft}>
-            Save draft
-          </button>
+          {!editing && (
+            <button type="button" className="button outline" onClick={saveDraft}>
+              Save draft
+            </button>
+          )}
           <button type="button" className="button outline" onClick={() => setPreview(true)}>
             Preview
           </button>
           <button type="button" className="button outline" onClick={cancel}>
             Cancel
           </button>
-          <button type="button" className="button outline" onClick={() => setConfirmClear(true)}>
-            Clear
-          </button>
+          {!editing && (
+            <button type="button" className="button outline" onClick={() => setConfirmClear(true)}>
+              Clear
+            </button>
+          )}
           <button type="button" className="button" onClick={publish} disabled={pending}>
-            {pending ? "Publishing…" : "Publish"}
+            {pending ? busyLabel : submitLabel}
           </button>
         </div>
       </div>
@@ -500,6 +532,7 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
                 type="text"
                 value={slug}
                 maxLength={200}
+                disabled={editing}
                 placeholder="auto-generated"
                 onChange={(event) => {
                   setSlugTouched(true);
@@ -775,7 +808,7 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
               >
                 Keep editing
               </button>
-              <button type="button" className="button danger" onClick={() => router.push("/")}>
+              <button type="button" className="button danger" onClick={() => router.push(exitTo)}>
                 Discard changes
               </button>
             </div>
@@ -824,7 +857,7 @@ export default function ArticleForm({ sections }: { sections: Section[] }) {
                   Back to editing
                 </button>
                 <button type="button" className="button" onClick={publish} disabled={pending}>
-                  {pending ? "Publishing…" : "Publish"}
+                  {pending ? busyLabel : submitLabel}
                 </button>
               </div>
             </div>

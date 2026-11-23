@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import CurrencyToggle from "@/components/CurrencyToggle";
 import MarketQuote from "@/components/MarketQuote";
 import { Offline, PageSkeleton } from "@/components/States";
-import { getMarketDetail, getMarketViews, type MarketView } from "@/lib/api";
+import { getMarketDetail, getMarketViews, type MarketDetail, type MarketView } from "@/lib/api";
 import { MARKET_RANGES, type MarketRange } from "@/lib/markets";
 
 type Props = {
@@ -33,6 +34,23 @@ function MarketList({ title, markets, current }: { title: string; markets: Marke
   );
 }
 
+function toRupees(detail: MarketDetail, rate: number): MarketDetail {
+  const scale = (n: number | null) => (n == null ? null : n * rate);
+  return {
+    ...detail,
+    currency: "INR",
+    price: detail.price * rate,
+    delta: detail.delta * rate,
+    previousClose: detail.previousClose * rate,
+    open: scale(detail.open),
+    high: scale(detail.high),
+    low: scale(detail.low),
+    week52High: scale(detail.week52High),
+    week52Low: scale(detail.week52Low),
+    points: detail.points.map((p) => ({ ...p, c: p.c * rate })),
+  };
+}
+
 async function MarketContent({ params, searchParams }: Props) {
   const [{ slug }, { range: raw }] = await Promise.all([params, searchParams]);
   const range = (Object.keys(MARKET_RANGES) as MarketRange[]).find((r) => r === raw) ?? "1D";
@@ -48,7 +66,14 @@ async function MarketContent({ params, searchParams }: Props) {
       </Link>
       <div className="market-detail">
         <section>
-          <MarketQuote detail={detail} />
+          {detail.inrRate ? (
+            <CurrencyToggle
+              usd={<MarketQuote detail={detail} />}
+              inr={<MarketQuote detail={toRupees(detail, detail.inrRate)} />}
+            />
+          ) : (
+            <MarketQuote detail={detail} />
+          )}
           <p className="side-note">Source: Yahoo Finance. Refreshes every 5 minutes.</p>
         </section>
         <aside>

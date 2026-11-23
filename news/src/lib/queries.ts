@@ -1,6 +1,7 @@
 import { io } from "next/cache";
-import type { Article, Edition, HomeData, Market, MarketDetail, MarketView, Section, TickerItem, Weather } from "./api";
-import { uploadImage } from "./cloudinary";
+import type { Article, Edition, EditableArticle, HomeData, Market, MarketDetail, MarketView, Section, TickerItem, Weather } from "./api";
+import { ADULT_WORDS_MESSAGE, hasAdultWords } from "./censor";
+import { isHostedImage, uploadImage } from "./cloudinary";
 import { collections, connect } from "./db";
 import { COMMODITIES, MARKET_RANGES, MARKET_SYMBOLS, marketSlug, type MarketRange } from "./markets";
 
@@ -23,6 +24,7 @@ type StoredArticle = {
   image?: string;
   publishedAt: Date;
   tickerOrder?: number;
+  authorId?: string;
 };
 
 const HOUR = 60 * 60 * 1000;
@@ -148,7 +150,11 @@ export async function fetchMarketDetail(slug: string, range: MarketRange): Promi
   const symbol = doc && MARKET_SYMBOLS[doc.name];
   if (!doc || !symbol) return null;
   const { range: span, interval } = MARKET_RANGES[range];
-  const [today, series] = await Promise.all([history(symbol, "1d", "5m"), history(symbol, span, interval)]);
+  const [today, series, fx] = await Promise.all([
+    history(symbol, "1d", "5m"),
+    history(symbol, span, interval),
+    COMMODITIES.has(doc.name) ? history("INR=X", "1d", "5m") : null,
+  ]);
   if (!today || !series) return null;
   const { meta } = today;
   const price = meta.regularMarketPrice as number;
@@ -160,7 +166,7 @@ export async function fetchMarketDetail(slug: string, range: MarketRange): Promi
     symbol,
     commodity: COMMODITIES.has(doc.name),
     currency: (meta.currency as string | undefined) ?? "",
-    value: formatPrice(price),
+    price,
     delta: price - previous,
     change: ((price - previous) / previous) * 100,
     previousClose: previous,
@@ -173,6 +179,7 @@ export async function fetchMarketDetail(slug: string, range: MarketRange): Promi
     updated: num(meta.regularMarketTime) ? (meta.regularMarketTime as number) * 1000 : Date.now(),
     range,
     points: series.points,
+    inrRate: fx ? num(fx.meta.regularMarketPrice) : null,
   };
 }
 
@@ -212,10 +219,11 @@ const API_URL =
   process.env.NEWS_API_URL ?? (process.env.VERCEL ? "" : "http://localhost:4000");
 
 function present(
-  article: StoredArticle,
+  raw: StoredArticle,
   names: Map<string, string>,
   { full = false } = {},
 ): Article {
+  const article = raw;
   const sectionName = names.get(article.section) ?? article.section;
   const image = !article.image
     ? `https://picsum.photos/seed/${article.slug}/1200/800`
@@ -461,7 +469,7 @@ export async function fetchArticlesBySlugs(slugs: string[]): Promise<Article[]> 
 
 export async function fetchArticle(
   slug: string,
-): Promise<{ article: Article; related: Article[] } | null> {
+): Promise<{ article: Article; related: Article[]; ownerId: string | null } | null> {
   await connect();
   await io();
   const found = (await collections.articles.findOne({ slug })) as unknown as StoredArticle | null;
@@ -487,6 +495,7 @@ export async function fetchArticle(
   return {
     article: present(found, names, { full: true }),
     related: related.map((a) => present(a, names)),
+    ownerId: found.authorId ?? null,
   };
 }
 
@@ -546,10 +555,27 @@ export type ArticleInput = {
   image?: { data: string } | null;
 };
 
-export async function insertArticle(
-  input: ArticleInput,
-): Promise<{ slug: string; scheduled: boolean } | { error: string }> {
-  await connect();
+type ArticleFields = {
+  title: string;
+  section: string;
+  dek: string;
+  author: string;
+  city: string;
+  lead: string;
+  body: string[];
+  tags: string[];
+  sources: { label: string; url: string }[];
+  related: string[];
+  seo: { title?: string; description?: string };
+  breaking: boolean;
+  readMinutes: number;
+  publishedAt?: Date;
+  // undefined keeps the stored image, null removes it, a string is the hosted URL.
+  image?: string | null;
+};
+
+// Validates and normalizes a story submission shared by create and edit.
+async function prepareArticle(input: ArticleInput): Promise<{ error: string } | { fields: ArticleFields }> {
   const title = String(input.title ?? "").trim();
   const section = String(input.section ?? "").trim();
   const dek = String(input.dek ?? "").trim();
@@ -596,9 +622,17 @@ export async function insertArticle(
     ...(input.seo?.title?.trim() ? { title: input.seo.title.trim() } : {}),
     ...(input.seo?.description?.trim() ? { description: input.seo.description.trim() } : {}),
   };
+  if (hasAdultWords([title, dek, lead, ...body, ...tags, seo.title ?? "", seo.description ?? ""].join(" "))) {
+    return { error: ADULT_WORDS_MESSAGE };
+  }
+
   // Featured images go to Cloudinary; the article stores the hosted URL.
-  let image: string | undefined;
-  if (input.image?.data && /^data:image\//.test(input.image.data)) {
+  let image: string | null | undefined;
+  if (input.image === null) {
+    image = null;
+  } else if (input.image?.data && isHostedImage(input.image.data, "gmi/articles")) {
+    image = input.image.data;
+  } else if (input.image?.data && /^data:image\//.test(input.image.data)) {
     if (input.image.data.length > 12_000_000) {
       return { error: "The featured image is too large — use one under ~9 MB." };
     }
@@ -607,37 +641,109 @@ export async function insertArticle(
     image = uploaded;
   }
 
-  const publishDate = input.publishAt ? new Date(input.publishAt) : new Date();
-  const publishedAt = Number.isNaN(publishDate.getTime()) ? new Date() : publishDate;
+  const publishDate = input.publishAt ? new Date(input.publishAt) : null;
+  const publishedAt = publishDate && !Number.isNaN(publishDate.getTime()) ? publishDate : undefined;
+  const words = (stripHtml(body.join(" ")) + " " + lead).split(/\s+/).filter(Boolean).length;
+  return {
+    fields: {
+      title,
+      section,
+      dek,
+      author,
+      city,
+      lead,
+      body,
+      tags,
+      sources,
+      related,
+      seo,
+      breaking: Boolean(input.breaking),
+      readMinutes: Math.max(1, Math.round(words / 60)),
+      publishedAt,
+      image,
+    },
+  };
+}
+
+export async function insertArticle(
+  input: ArticleInput,
+  authorId: string,
+): Promise<{ slug: string; scheduled: boolean } | { error: string }> {
+  await connect();
+  const prepared = await prepareArticle(input);
+  if ("error" in prepared) return prepared;
+  const { image, ...fields } = prepared.fields;
+  const publishedAt = fields.publishedAt ?? new Date();
 
   // Headlines often repeat, so the slug gets a numeric suffix until it is free.
-  const base = slugify(input.slug?.trim() || title) || "story";
+  const base = slugify(input.slug?.trim() || fields.title) || "story";
   let slug = base;
   for (let n = 2; await collections.articles.findOne({ slug }, { projection: { _id: 1 } }); n += 1) {
     slug = `${base}-${n}`;
   }
 
-  const words = (stripHtml(body.join(" ")) + " " + lead).split(/\s+/).filter(Boolean).length;
   await collections.articles.insertOne({
+    ...fields,
     slug,
-    section,
-    title,
-    dek,
-    author,
-    city,
-    lead,
-    body,
-    tags,
-    sources,
-    related,
-    seo,
-    breaking: Boolean(input.breaking),
-    ...(image ? { image } : {}),
-    reads: 0,
-    readMinutes: Math.max(1, Math.round(words / 60)),
+    authorId,
     publishedAt,
+    reads: 0,
+    ...(image ? { image } : {}),
   });
   return { slug, scheduled: publishedAt.getTime() > Date.now() };
+}
+
+// Only the author can change a story. The slug stays fixed, and the publish date and
+// image are kept unless the submission changes them.
+export async function updateArticle(
+  slug: string,
+  input: ArticleInput,
+  userId: string,
+): Promise<{ slug: string } | { error: string }> {
+  await connect();
+  const existing = await collections.articles.findOne({ slug }, { projection: { authorId: 1 } });
+  if (existing?.authorId !== userId) return { error: "You can only edit your own stories." };
+  const prepared = await prepareArticle(input);
+  if ("error" in prepared) return prepared;
+  const { image, publishedAt, ...fields } = prepared.fields;
+  await collections.articles.updateOne(
+    { slug, authorId: userId },
+    {
+      $set: { ...fields, ...(publishedAt ? { publishedAt } : {}), ...(image ? { image } : {}) },
+      ...(image === null ? { $unset: { image: "" } } : {}),
+    },
+  );
+  return { slug };
+}
+
+export async function deleteArticle(slug: string, userId: string): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  const result = await collections.articles.deleteOne({ slug, authorId: userId });
+  return result.deletedCount ? { ok: true } : { error: "You can only delete your own stories." };
+}
+
+export async function fetchEditableArticle(slug: string, userId: string): Promise<EditableArticle | null> {
+  await connect();
+  await io();
+  const doc = (await collections.articles.findOne({ slug, authorId: userId })) as unknown as StoredArticle | null;
+  if (!doc) return null;
+  const related = await fetchArticlesBySlugs(doc.related ?? []);
+  return {
+    slug: doc.slug,
+    title: doc.title,
+    dek: doc.dek,
+    lead: doc.lead ?? "",
+    body: doc.body,
+    section: doc.section,
+    author: doc.author,
+    city: doc.city,
+    tags: doc.tags ?? [],
+    sources: doc.sources ?? [],
+    related: related.map(({ slug, title, sectionName }) => ({ slug, title, sectionName })),
+    seo: doc.seo ?? {},
+    breaking: Boolean(doc.breaking),
+    image: doc.image ?? null,
+  };
 }
 
 export async function insertSubscriber(emailField: unknown): Promise<{ ok: true } | { error: string }> {

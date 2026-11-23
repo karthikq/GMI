@@ -14,9 +14,11 @@ import { PLANS } from "@/lib/plans";
 import { INVITABLE_ROLES, isEditorial, type Role } from "@/lib/roles";
 import { recordRead, toggleBookmark } from "@/lib/reading";
 import {
+  deleteArticle,
   insertArticle,
   insertSubscriber,
   searchArticles as searchArticleDocs,
+  updateArticle,
 } from "@/lib/queries";
 import type { ArticleInput } from "@/lib/queries";
 
@@ -246,12 +248,12 @@ export async function searchArticles(query: string): Promise<RelatedPick[]> {
 
 export async function createArticle(input: ArticleInput): Promise<{ message: string } | void> {
   const user = await getSessionUser();
-  if (!isEditorial(user?.role)) {
+  if (!user || !isEditorial(user.role)) {
     return { message: "Only editorial staff can publish stories." };
   }
   let result: { slug: string; scheduled: boolean };
   try {
-    const inserted = await insertArticle(input);
+    const inserted = await insertArticle(input, user.id);
     if ("error" in inserted) {
       return { message: inserted.error };
     }
@@ -260,6 +262,32 @@ export async function createArticle(input: ArticleInput): Promise<{ message: str
     return { message: "Can't reach the news server. Try again shortly." };
   }
   redirect(`/article/${result.slug}${result.scheduled ? "?scheduled=1" : ""}`);
+}
+
+// Saves edits to a story the signed-in editor wrote. Ownership is checked in the query.
+export async function updateStory(slug: string, input: ArticleInput): Promise<{ message: string } | void> {
+  const user = await getSessionUser();
+  if (!user || !isEditorial(user.role)) return { message: "Only editorial staff can edit stories." };
+  const result = await updateArticle(slug, input, user.id);
+  if ("error" in result) return { message: result.error };
+  redirect(`/article/${result.slug}`);
+}
+
+// Deletes a story the signed-in editor wrote, then returns to the front page.
+export async function deleteStory(slug: string): Promise<{ message: string } | void> {
+  const user = await getSessionUser();
+  if (!user || !isEditorial(user.role)) return { message: "Only editorial staff can delete stories." };
+  const result = await deleteArticle(slug, user.id);
+  if ("error" in result) return { message: result.error };
+  redirect("/");
+}
+
+// Signed params for uploading a story image straight from the browser, so the
+// image never travels through the server action body (Next caps it at 4 MB).
+export async function signArticleUpload() {
+  const user = await getSessionUser();
+  if (!isEditorial(user?.role)) return { message: "Only editors can upload story images." };
+  return signUpload("gmi/articles") ?? { message: "Photo uploads aren't available right now." };
 }
 
 const AVATAR_FOLDER = "gmi/avatars";

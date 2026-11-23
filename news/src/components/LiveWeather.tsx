@@ -30,30 +30,32 @@ const CONDITIONS: Record<number, string> = {
 };
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
-// Uses the visitor's position for live conditions; falls back to the server value when location is unavailable.
+// Uses the visitor's IP-based location for live conditions; falls back to the server value when location is unavailable.
 export default function LiveWeather({ fallback }: { fallback: Weather | null }) {
   const [live, setLive] = useState<Current | null>(null);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
     let cancelled = false;
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        try {
-          const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude}&longitude=${coords.longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code`;
-          const { current } = await (await fetch(url)).json();
-          if (cancelled) return;
-          const direction = COMPASS[Math.round(current.wind_direction_10m / 45) % 8];
-          setLive({
-            city: "Your location",
-            temperature: `${Math.round(current.temperature_2m)}°C`,
-            summary: `${CONDITIONS[current.weather_code] ?? "Conditions"}, wind ${direction} ${Math.round(current.wind_speed_10m)} km/h`,
-          });
-        } catch {}
-      },
-      () => {},
-      { maximumAge: 10 * 60 * 1000, timeout: 10000 },
-    );
+    const show = async (latitude: number, longitude: number, city: string) => {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code`;
+        const { current } = await (await fetch(url)).json();
+        if (cancelled) return;
+        const direction = COMPASS[Math.round(current.wind_direction_10m / 45) % 8];
+        setLive({
+          city,
+          temperature: `${Math.round(current.temperature_2m)}°C`,
+          summary: `${CONDITIONS[current.weather_code] ?? "Conditions"}, wind ${direction} ${Math.round(current.wind_speed_10m)} km/h`,
+        });
+      } catch {}
+    };
+    const byIp = async () => {
+      try {
+        const { latitude, longitude, city } = await (await fetch("https://geolocation-db.com/json/")).json();
+        if (typeof latitude === "number" && typeof longitude === "number") await show(latitude, longitude, city || "Your location");
+      } catch {}
+    };
+    byIp();
     return () => {
       cancelled = true;
     };

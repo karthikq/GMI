@@ -12,7 +12,7 @@ const axisLabel = (range: MarketRange, t: number) =>
   range === "1D" ? timeFormat.format(t) : range === "5Y" || range === "Max" ? monthFormat.format(t) : dayFormat.format(t);
 
 export default function MarketQuote({ detail }: { detail: MarketDetail }) {
-  const { name, slug, symbol, commodity, currency, value, delta, change, previousClose, range, points } = detail;
+  const { name, slug, symbol, commodity, currency, price, delta, change, previousClose, range, points } = detail;
   const up = change >= 0;
   const stats: [string, string][] = [
     ["Open", formatAmount(detail.open)],
@@ -34,7 +34,7 @@ export default function MarketQuote({ detail }: { detail: MarketDetail }) {
         </p>
       </header>
       <div className="quote-price">
-        <strong className="quote-value">{value}</strong>
+        <strong className="quote-value">{formatAmount(price)}</strong>
         {currency && <span className="quote-currency">{currency}</span>}
         <span className={up ? "market-change up" : "market-change down"}>
           {up ? "▲" : "▼"} {formatAmount(Math.abs(delta))} ({Math.abs(change).toFixed(2)}%) today

@@ -11,6 +11,7 @@ import { getArticles, getSections } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { profileImage } from "@/lib/avatar";
 import { isEditorial } from "@/lib/roles";
+import { fetchStoryList } from "@/lib/analytics";
 import { fetchArticlesBySlugs } from "@/lib/queries";
 import { getReaderStats, getRecentReadSlugs, getSavedSlugs } from "@/lib/reading";
 
@@ -84,6 +85,7 @@ async function ProfileContent() {
   }
 
   const followed = stats.desks;
+  const stories = user && isEditorial(user.role) ? await fetchStoryList(user.id) : null;
   const display = user
     ? {
         ...reader,
@@ -123,6 +125,11 @@ async function ProfileContent() {
           </p>
         </div>
         <div className="profile-actions">
+          {user && isEditorial(user.role) && (
+            <Link href="/analytics" className="button outline">
+              Analytics
+            </Link>
+          )}
           {user && (
             <Link href="/profile/edit" className="button outline">
               Edit profile
@@ -163,6 +170,36 @@ async function ProfileContent() {
 
       <div className="interior">
         <div>
+          {stories && (
+            <section>
+              <div className="section-head">
+                <h2>Your stories</h2>
+              </div>
+              {stories.length ? (
+                <ol className="trend">
+                  {stories.map((story) => (
+                    <li key={story.slug}>
+                      <div>
+                        <h3>
+                          <Link href={`/article/${story.slug}`}>{story.title}</Link>
+                        </h3>
+                        <span className="kicker muted">
+                          {story.scheduled ? "Scheduled" : "Published"} · {story.sectionName} · {story.readers}{" "}
+                          {story.readers === 1 ? "reader" : "readers"}
+                        </span>{" "}
+                        <Link href={`/article/${story.slug}/edit`} className="more">
+                          Edit
+                        </Link>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="side-note">Stories you publish will show up here.</p>
+              )}
+            </section>
+          )}
+
           <section>
             <div className="section-head">
               <h2>Saved stories</h2>
