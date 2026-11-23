@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { getEdition, getSections, getTicker } from "@/lib/api";
+import { getEdition, getMarkets, getSections, getTicker } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { profileImage } from "@/lib/avatar";
+import { marketSlug } from "@/lib/markets";
 import { isEditorial } from "@/lib/roles";
 import AccountMenu from "./AccountMenu";
+import LiveWeather from "./LiveWeather";
 import MobileMenu from "./MobileMenu";
 import NavLinks from "./NavLinks";
 import ThemeToggle from "./ThemeToggle";
@@ -29,14 +31,7 @@ async function EditionRight() {
   const up = edition.market.change >= 0;
   return (
     <>
-      {edition.weather && (
-        <>
-          <strong>
-            {edition.weather.city} · {edition.weather.temperature}
-          </strong>
-          <span>{edition.weather.summary}</span>
-        </>
-      )}
+      <LiveWeather fallback={edition.weather} />
       <span>
         {edition.market.name}{" "}
         <b className={up ? "up" : "down"}>
@@ -133,6 +128,37 @@ async function Ticker() {
   );
 }
 
+async function Markets() {
+  const markets = await getMarkets();
+ 
+  
+  if (!markets?.length) return null;
+  // The list is rendered twice so the scroll loops without a gap.
+  const loop = [...markets, ...markets];
+  return (
+    <div className="ticker ticker-markets">
+      <div className="container ticker-inner">
+        <span className="ticker-label">Markets</span>
+        <div className="ticker-window">
+          <ul className="ticker-track">
+            {loop.map((market, index) => (
+              <li key={index} aria-hidden={index >= markets.length}>
+                <Link href={`/markets/${marketSlug(market.name)}`} tabIndex={index >= markets.length ? -1 : 0}>
+                  {market.name}
+                </Link>
+                <span className="market-value">{market.value}</span>
+                <span className={market.change >= 0 ? "market-change up" : "market-change down"}>
+                  {market.change >= 0 ? "▲" : "▼"} {Math.abs(market.change).toFixed(2)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Header() {
   return (
     <>
@@ -214,6 +240,9 @@ export default function Header() {
 
       <Suspense>
         <Ticker />
+      </Suspense>
+      <Suspense>
+        <Markets />
       </Suspense>
     </>
   );

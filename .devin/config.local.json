@@ -3,7 +3,8 @@
     "allow": [
       "Exec(curl)",
       "Exec(node)",
-      "Exec(./node_modules/.bin/eslint)"
+      "Exec(./node_modules/.bin/eslint)",
+      "Exec(cat)"
     ]
   }
 }

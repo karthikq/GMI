@@ -1,7 +1,8 @@
 import { io } from "next/cache";
-import type { Article, Edition, HomeData, Market, Section, TickerItem, Weather } from "./api";
+import type { Article, Edition, HomeData, Market, MarketDetail, MarketView, Section, TickerItem, Weather } from "./api";
 import { uploadImage } from "./cloudinary";
 import { collections, connect } from "./db";
+import { COMMODITIES, MARKET_RANGES, MARKET_SYMBOLS, marketSlug, type MarketRange } from "./markets";
 
 type StoredArticle = {
   slug: string;
@@ -54,6 +55,127 @@ const ROLES: Record<string, string> = {
 
 const getSectionDocs = () => collections.sections.find({}, HIDDEN).sort({ order: 1 }).toArray();
 const getMarketDocs = () => collections.markets.find({}, HIDDEN).sort({ order: 1 }).toArray();
+
+type Point = { t: number; c: number };
+
+const formatPrice = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Daily closes over `range`. The change is the last close against the one before it,
+// falling back to the previous close Yahoo reports when only one bar is returned.
+async function chart(symbol: string, range: string) {
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 300 } },
+    );
+    if (!res.ok) return null;
+    const result = (await res.json()).chart?.result?.[0];
+    const meta = result?.meta;
+    if (!meta?.regularMarketPrice || !meta.chartPreviousClose) return null;
+    const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
+    const points: Point[] = (result.timestamp ?? []).flatMap((t: number, i: number) =>
+      typeof closes[i] === "number" ? [{ t: t * 1000, c: closes[i] as number }] : [],
+    );
+    const previous = points.at(-2)?.c ?? meta.chartPreviousClose;
+    const price = meta.regularMarketPrice as number;
+    return {
+      price,
+      change: ((price - previous) / previous) * 100,
+      currency: (meta.currency as string | undefined) ?? "",
+      points,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function withLiveQuotes(markets: Market[]): Promise<Market[]> {
+  return Promise.all(
+    markets.map(async (market) => {
+      const symbol = MARKET_SYMBOLS[market.name];
+      const quote = symbol ? await chart(symbol, "1d") : null;
+      return quote ? { ...market, value: formatPrice(quote.price), change: quote.change } : market;
+    }),
+  );
+}
+
+export async function fetchMarketViews(): Promise<MarketView[]> {
+  await connect();
+  await io();
+  const docs = (await getMarketDocs()) as unknown as Market[];
+  return Promise.all(
+    docs.map(async (market) => {
+      const symbol = MARKET_SYMBOLS[market.name];
+      const quote = symbol ? await chart(symbol, "3mo") : null;
+      return {
+        ...market,
+        ...(quote ? { value: formatPrice(quote.price), change: quote.change } : {}),
+        slug: marketSlug(market.name),
+        commodity: COMMODITIES.has(market.name),
+        currency: quote?.currency ?? "",
+        points: quote?.points ?? [],
+      };
+    }),
+  );
+}
+
+async function history(symbol: string, range: string, interval: string) {
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 300 } },
+    );
+    if (!res.ok) return null;
+    const result = (await res.json()).chart?.result?.[0];
+    const meta = result?.meta;
+    if (!meta?.regularMarketPrice || !meta.chartPreviousClose) return null;
+    const quote = result.indicators?.quote?.[0] ?? {};
+    const points: MarketDetail["points"] = (result.timestamp ?? []).flatMap((t: number, i: number) =>
+      typeof quote.close?.[i] === "number"
+        ? [{ t: t * 1000, c: quote.close[i] as number, v: typeof quote.volume?.[i] === "number" ? (quote.volume[i] as number) : null }]
+        : [],
+    );
+    return { meta, points };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchMarketDetail(slug: string, range: MarketRange): Promise<MarketDetail | null> {
+  await connect();
+  await io();
+  const doc = ((await getMarketDocs()) as unknown as Market[]).find((m) => marketSlug(m.name) === slug);
+  const symbol = doc && MARKET_SYMBOLS[doc.name];
+  if (!doc || !symbol) return null;
+  const { range: span, interval } = MARKET_RANGES[range];
+  const [today, series] = await Promise.all([history(symbol, "1d", "5m"), history(symbol, span, interval)]);
+  if (!today || !series) return null;
+  const { meta } = today;
+  const price = meta.regularMarketPrice as number;
+  const previous = meta.chartPreviousClose as number;
+  const num = (n: unknown) => (typeof n === "number" ? n : null);
+  return {
+    name: doc.name,
+    slug,
+    symbol,
+    commodity: COMMODITIES.has(doc.name),
+    currency: (meta.currency as string | undefined) ?? "",
+    value: formatPrice(price),
+    delta: price - previous,
+    change: ((price - previous) / previous) * 100,
+    previousClose: previous,
+    open: num(meta.regularMarketOpen),
+    high: num(meta.regularMarketDayHigh),
+    low: num(meta.regularMarketDayLow),
+    volume: num(meta.regularMarketVolume),
+    week52High: num(meta.fiftyTwoWeekHigh),
+    week52Low: num(meta.fiftyTwoWeekLow),
+    updated: num(meta.regularMarketTime) ? (meta.regularMarketTime as number) * 1000 : Date.now(),
+    range,
+    points: series.points,
+  };
+}
+
 const sectionNames = async () => new Map((await getSectionDocs()).map((s) => [s.slug, s.name]));
 
 // Extra fields only the article page needs.
@@ -214,6 +336,12 @@ export async function fetchEdition(): Promise<Edition> {
   };
 }
 
+export async function fetchMarkets(): Promise<Market[]> {
+  await connect();
+  await io();
+  return withLiveQuotes((await getMarketDocs()) as unknown as Market[]);
+}
+
 export async function fetchTicker(): Promise<TickerItem[]> {
   await connect();
   await io();
@@ -276,7 +404,7 @@ export async function fetchHome(): Promise<HomeData> {
     .slice(0, 5)
     .map((a) => present(a, names));
 
-  return { lead, briefs, top, across, desks, mostRead, markets: markets as unknown as Market[], opinion, pictures };
+  return { lead, briefs, top, across, desks, mostRead, markets: await withLiveQuotes(markets as unknown as Market[]), opinion, pictures };
 }
 
 export async function fetchArticles(params: {
@@ -285,6 +413,7 @@ export async function fetchArticles(params: {
   limit?: number;
   offset?: number;
   olderThanDays?: number;
+  newerThanDays?: number;
 }): Promise<{ total: number; articles: Article[] }> {
   await connect();
   await io();
@@ -293,11 +422,10 @@ export async function fetchArticles(params: {
 
   const filter: Record<string, unknown> = { ...PUBLISHED() };
   if (params.section) filter.section = String(params.section);
-  if (params.olderThanDays && params.olderThanDays > 0) {
-    filter.publishedAt = {
-      $lte: new Date(Date.now() - params.olderThanDays * 24 * HOUR),
-    };
-  }
+  const window: Record<string, Date> = { ...PUBLISHED().publishedAt };
+  if (params.olderThanDays && params.olderThanDays > 0) window.$lte = new Date(Date.now() - params.olderThanDays * 24 * HOUR);
+  if (params.newerThanDays) window.$gt = new Date(Date.now() - params.newerThanDays * 24 * HOUR);
+  filter.publishedAt = window;
   const terms = params.q ? String(params.q).split(/\s+/).filter(Boolean) : [];
   // Every term must appear somewhere in the story, matching the old substring search.
   if (terms.length) {

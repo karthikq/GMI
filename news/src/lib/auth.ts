@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { io } from "next/cache";
+import { connection } from "next/server";
 import { auth } from "@/auth";
 import { collections, connect } from "./db";
 import { normalizeRole, type Role } from "./roles";
@@ -26,6 +27,7 @@ export type SessionUser = {
 // The NextAuth JWT only carries our Mongo user id; profile fields, role and
 // plan are read fresh from the users collection on each request.
 export async function getSessionUser(): Promise<SessionUser | null> {
+  await connection();
   const session = await auth();
   const id = session?.user?.id;
   if (!id || !ObjectId.isValid(id)) return null;

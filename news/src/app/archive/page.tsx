@@ -15,9 +15,10 @@ const validDays = new Set(ARCHIVE_OPTIONS.map((o) => o.days));
 async function Results({ searchParams }: Props) {
   const { days: raw } = await searchParams;
   const days = validDays.has(Number(raw)) ? Number(raw) : 7;
-  const label = ARCHIVE_OPTIONS.find((o) => o.days === days)?.label ?? "1 week";
+  const label = ARCHIVE_OPTIONS.find((o) => o.days === days)?.label ?? "This week";
 
-  const result = await getArticles({ olderThanDays: days, limit: 30 });
+  const result = await getArticles({ olderThanDays: days - 7, newerThanDays: days, limit: 30 });
+  console.log("Archive result:", result);
   if (!result) return <Offline />;
 
   return (
@@ -25,7 +26,7 @@ async function Results({ searchParams }: Props) {
       <header className="page-head">
         <h1>News archive</h1>
         <p>
-          {result.total} {result.total === 1 ? "story" : "stories"} from {label} ago and earlier
+          {result.total} {result.total === 1 ? "story" : "stories"} · {label}
         </p>
         <nav className="archive-nav" aria-label="Archive range">
           {ARCHIVE_OPTIONS.map((option) => (
@@ -35,7 +36,7 @@ async function Results({ searchParams }: Props) {
               className={option.days === days ? "archive-nav-current" : undefined}
               aria-current={option.days === days ? "page" : undefined}
             >
-              {option.label} ago
+              {option.label}
             </Link>
           ))}
         </nav>

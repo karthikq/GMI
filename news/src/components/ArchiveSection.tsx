@@ -10,14 +10,17 @@ export default function ArchiveSection({ initial }: { initial: Article[] }) {
   const [days, setDays] = useState(7);
   const [articles, setArticles] = useState(initial);
   const [loading, setLoading] = useState(false);
-
+      console.log(articles,'articlesarticles');
   const pick = async (next: number) => {
     setDays(next);
     setLoading(true);
     try {
       const response = await fetch(`/api/archive?days=${next}`);
+
+      
       if (response.ok) {
         const result = await response.json();
+       
         setArticles(result.articles);
       }
     } finally {
@@ -30,10 +33,10 @@ export default function ArchiveSection({ initial }: { initial: Article[] }) {
   return (
     <section className="section-block">
       <div className="section-head">
-        <h2>News {label} ago</h2>
+        <h2>News · {label}</h2>
         <div className="archive-controls">
           <label className="archive-picker">
-            Ago
+            Period
             <select
               value={days}
               onChange={(event) => pick(Number(event.target.value))}
@@ -58,7 +61,7 @@ export default function ArchiveSection({ initial }: { initial: Article[] }) {
           ))}
         </div>
       ) : (
-        <p className="archive-empty">No stories in the archive for {label} ago.</p>
+        <p className="archive-empty">No stories in {label}.</p>
       )}
     </section>
   );

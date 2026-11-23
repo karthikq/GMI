@@ -1,9 +1,13 @@
 import { connection } from "next/server";
+import type { MarketRange } from "./markets";
 import {
   fetchArticle,
   fetchArticles,
   fetchEdition,
   fetchHome,
+  fetchMarketDetail,
+  fetchMarketViews,
+  fetchMarkets,
   fetchSections,
   fetchTicker,
 } from "./queries";
@@ -58,6 +62,34 @@ export type TickerItem = { slug: string; title: string; time: string };
 
 export type Market = { name: string; value: string; change: number };
 
+export type MarketView = Market & {
+  slug: string;
+  commodity: boolean;
+  currency: string;
+  points: { t: number; c: number }[];
+};
+
+export type MarketDetail = {
+  name: string;
+  slug: string;
+  symbol: string;
+  commodity: boolean;
+  currency: string;
+  value: string;
+  delta: number;
+  change: number;
+  previousClose: number;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  week52High: number | null;
+  week52Low: number | null;
+  updated: number;
+  range: MarketRange;
+  points: { t: number; c: number; v: number | null }[];
+};
+
 export type HomeData = {
   lead: Article;
   briefs: Article[];
@@ -86,6 +118,9 @@ async function get<T>(run: () => Promise<T>): Promise<T | null> {
 export const getSections = () => get(fetchSections);
 export const getEdition = () => get(fetchEdition);
 export const getTicker = () => get(fetchTicker);
+export const getMarkets = () => get(fetchMarkets);
+export const getMarketViews = () => get(fetchMarketViews);
+export const getMarketDetail = (slug: string, range: MarketRange) => get(() => fetchMarketDetail(slug, range));
 export const getHome = () => get(fetchHome);
 
 export const getArticle = (slug: string) => get(() => fetchArticle(slug));
@@ -96,6 +131,7 @@ export function getArticles(params: {
   limit?: number;
   offset?: number;
   olderThanDays?: number;
+  newerThanDays?: number;
 }) {
   return get(() => fetchArticles(params));
 }

@@ -5,6 +5,7 @@ import ScrollReveal from "@/components/ScrollReveal";
 import { Offline, PageSkeleton } from "@/components/States";
 import ArchiveSection from "@/components/ArchiveSection";
 import { getArticles, getHome, type Article } from "@/lib/api";
+import { marketSlug } from "@/lib/markets";
 
 const initials = (name: string) =>
   name
@@ -28,7 +29,7 @@ function Columnist({ article }: { article: Article }) {
 }
 
 async function HomeContent() {
-  const [home, archive] = await Promise.all([getHome(), getArticles({ olderThanDays: 7, limit: 4 })]);
+  const [home, archive] = await Promise.all([getHome(), getArticles({ newerThanDays: 7, limit: 4 })]);
   if (!home) return <Offline />;
   const { lead, briefs, top, across, desks, mostRead, markets, opinion, pictures } = home;
   const [topFeature, ...topRest] = top;
@@ -171,7 +172,7 @@ async function HomeContent() {
             <ul className="markets">
               {markets.map((market) => (
                 <li key={market.name}>
-                  <span>{market.name}</span>
+                  <Link href={`/markets/${marketSlug(market.name)}`}>{market.name}</Link>
                   <span className="market-value">{market.value}</span>
                   <span className={market.change >= 0 ? "market-change up" : "market-change down"}>
                     {market.change >= 0 ? "▲" : "▼"} {Math.abs(market.change).toFixed(2)}%

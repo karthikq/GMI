@@ -819,6 +819,18 @@ html.theme-animating *::after {
   animation: pulse 1.6s ease-in-out infinite;
 }
 
+.ticker-markets {
+  border-top: 1px solid #343a44;
+}
+
+.ticker-markets .ticker-inner {
+  height: 36px;
+}
+
+.ticker-markets .ticker-label {
+  background: #343a44;
+}
+
 .ticker-window {
   flex: 1;
   overflow: hidden;
@@ -1952,6 +1964,254 @@ a.tag.solid:hover {
 
 .market-change.down {
   color: var(--live);
+}
+
+.market-group {
+  margin-bottom: 56px;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.market-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.market-card:hover {
+  border-color: var(--ink);
+}
+
+.market-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.market-card-value {
+  font-family: var(--font-mono), monospace;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.market-chart {
+  display: block;
+  height: auto;
+}
+
+.market-chart .chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.market-chart .chart-axis {
+  fill: var(--ink-mute);
+  font: 12px var(--font-mono), monospace;
+}
+
+.chart-empty {
+  padding: 24px 0;
+  font-size: 13px;
+  color: var(--ink-mute);
+}
+
+.market-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 40px;
+  align-items: start;
+}
+
+.market-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.market-stat .market-card-value {
+  font-size: 40px;
+}
+
+.market-chart-frame {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.market-back {
+  display: inline-block;
+  margin-bottom: 18px;
+}
+
+.quote-head h1 {
+  margin: 0;
+}
+
+.quote-chart-wrap {
+  position: relative;
+}
+
+.quote-chart {
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.quote-cursor {
+  stroke: var(--ink-mute);
+  stroke-width: 1;
+}
+
+.quote-dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.quote-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--surface);
+  font: 12px var(--font-mono), monospace;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.quote-tip strong {
+  font-size: 13px;
+}
+
+.quote-sub,
+.quote-time {
+  font: 12px var(--font-mono), monospace;
+  color: var(--ink-mute);
+}
+
+.quote-sub {
+  margin: 4px 0 0;
+}
+
+.quote-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.quote-value {
+  font-family: var(--font-mono), monospace;
+  font-size: 40px;
+  font-weight: 600;
+}
+
+.quote-currency {
+  font-size: 14px;
+  color: var(--ink-mute);
+}
+
+.quote-time {
+  margin: 6px 0 16px;
+}
+
+.quote-ranges {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.quote-range {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  text-decoration: none;
+}
+
+.quote-range.current {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.quote-prev {
+  stroke: var(--ink-mute);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.quote-vol {
+  fill: var(--ink-mute);
+  fill-opacity: 0.35;
+}
+
+.quote-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.quote-stats dt {
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.quote-stats dd {
+  margin: 2px 0 0;
+  font: 15px var(--font-mono), monospace;
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .quote-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.markets li a {
+  color: inherit;
+}
+
+.markets li a[aria-current="page"] {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+@media (max-width: 860px) {
+  .market-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .market-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .market-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .side-note {
