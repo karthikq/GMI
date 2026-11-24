@@ -1,3 +1,4 @@
+import { nextIssueDate } from "@/lib/newsletters";
 import type { Newsletter, SampleStory } from "@/lib/newsletters";
 
 /* The email templates shown in the example-email preview. Every skin renders
@@ -30,7 +31,57 @@ function CoffeeCup() {
   );
 }
 
-/* ---- Classic Broadsheet (free) ------------------------------------------ */
+/* ---- Daily Edition (default, free): black & white front page --------------- */
+
+function DailySheet({ letter }: { letter: Newsletter }) {
+  const { sample } = letter;
+  const [lead, second, third] = sample.stories;
+  return (
+    <div className="fmt-sheet fmt-daily">
+      <div className="fmt-daily-logo">
+        {/* Static brand asset; matches how the header renders the logo. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="Good Morning Indian" />
+      </div>
+      <div className="fmt-daily-meta">
+        <span>{letter.name}</span>
+        <span>{sample.volNumber}</span>
+        <span>{nextIssueDate(letter.cadence)}</span>
+      </div>
+      <h1 className="fmt-daily-headline">{sample.headline}</h1>
+      <p className="fmt-daily-subtitle">{letter.tagline}</p>
+      <Img story={lead} className="fmt-daily-hero" />
+      <div className="fmt-daily-grid">
+        <div className="fmt-daily-left">
+          <Img story={second} className="fmt-daily-img" />
+          <p>
+            {sample.leadDek} {lead.summary}
+          </p>
+        </div>
+        <div className="fmt-daily-right">
+          <p>
+            <strong>{second.tag}.</strong> {second.title} — {second.summary} {letter.blurb}
+          </p>
+          <div className="fmt-daily-sub">
+            <div>
+              <h2>{third.tag}</h2>
+              <p>
+                {third.title}. {third.summary}
+              </p>
+            </div>
+            <Img story={third} className="fmt-daily-img" />
+          </div>
+        </div>
+      </div>
+      <div className="fmt-daily-foot">
+        <span>{sample.ctaText}</span>
+        <span>{sample.footerTag}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Classic Broadsheet ---------------------------------------------------- */
 
 function ClassicSheet({ letter }: { letter: Newsletter }) {
   const { sample } = letter;
@@ -44,7 +95,7 @@ function ClassicSheet({ letter }: { letter: Newsletter }) {
       <div className="email-sheet-bar">
         <span>{sample.volNumber}</span>
         <span className="email-sheet-sub">{sample.subHeader}</span>
-        <span>{sample.date}</span>
+        <span>{nextIssueDate(letter.cadence)}</span>
       </div>
       <div className="email-sheet-topics">{letter.topics.join("  /  ")}  /  A BRIGHTER TOMORROW</div>
       <div className="email-sheet-lead">
@@ -94,48 +145,44 @@ function ClassicSheet({ letter }: { letter: Newsletter }) {
   );
 }
 
-/* ---- Midnight Bulletin (brutalist black & white) ------------------------- */
+/* ---- Corporate Report: white, navy & orange business layout ---------------- */
 
-function MidnightSheet({ letter }: { letter: Newsletter }) {
+function CorporateSheet({ letter }: { letter: Newsletter }) {
   const { sample } = letter;
   const [lead, second, third] = sample.stories;
   return (
-    <div className="fmt-sheet fmt-midnight">
-      <h1 className="fmt-mid-masthead">{letter.name}</h1>
-      <div className="fmt-mid-meta">
-        <span>{sample.date}</span>
-        <span>{sample.volNumber}</span>
+    <div className="fmt-sheet fmt-corp">
+      <div className="fmt-corp-kicker">
+        <span>Good Morning Indian</span>
+        <i aria-hidden="true" />
       </div>
-      <h2 className="fmt-mid-headline">{sample.headline}</h2>
-      <p className="fmt-mid-sub">{letter.topics.join(" · ")}</p>
-      <div className="fmt-mid-row">
-        <Img story={lead} className="fmt-mid-img" />
-        <div className="fmt-mid-box">
-          <span className="fmt-mid-topic">Topic 1 · {lead.tag}</span>
-          <h3>{lead.title}</h3>
+      <h1 className="fmt-corp-masthead">{letter.name}</h1>
+      <div className="fmt-corp-hero">
+        <Img story={lead} className="fmt-corp-hero-img" />
+        <span className="fmt-corp-bar" aria-hidden="true" />
+      </div>
+      <div className="fmt-corp-body">
+        <div className="fmt-corp-box">
+          <p className="fmt-corp-byline">Written by: The {letter.name} desk</p>
+          <h2>{sample.headline}</h2>
+          <p>{sample.leadDek}</p>
           <p>{lead.summary}</p>
-          <p className="fmt-mid-box-extra">{sample.leadDek}</p>
         </div>
-      </div>
-      <div className="fmt-mid-row fmt-mid-rev">
-        <div className="fmt-mid-box">
-          <span className="fmt-mid-topic">Topic 2 · {second.tag}</span>
+        <div className="fmt-corp-side">
           <h3>{second.title}</h3>
           <p>{second.summary}</p>
+          <p>{letter.blurb}</p>
+          <p>{sample.quote?.text ?? third.summary}</p>
         </div>
-        <Img story={second} className="fmt-mid-img" />
       </div>
-      <div className="fmt-mid-row">
-        <div className="fmt-mid-box">
-          <span className="fmt-mid-topic">Topic 3 · {third.tag}</span>
-          <h3>{third.title}</h3>
-          <p>{third.summary}</p>
+      <div className="fmt-corp-foot">
+        <div>
+          <p>
+            <strong>{third.tag}</strong> — {third.title}. {third.summary}
+          </p>
+          <span className="fmt-corp-more">{sample.ctaText}</span>
         </div>
-        <Img story={third} className="fmt-mid-img" />
-      </div>
-      <div className="fmt-mid-foot">
-        <span className="fmt-mid-cta">{sample.ctaText}</span>
-        <span>{sample.footerTag}</span>
+        <Img story={third} className="fmt-corp-foot-img" />
       </div>
     </div>
   );
@@ -151,7 +198,7 @@ function HeritageSheet({ letter }: { letter: Newsletter }) {
       <div className="fmt-her-top">
         <span>Special Edition</span>
         <span>{sample.volNumber}</span>
-        <span>{sample.date}</span>
+        <span>{nextIssueDate(letter.cadence)}</span>
       </div>
       <h1 className="fmt-her-masthead">{letter.name}</h1>
       <div className="fmt-her-rule" />
@@ -207,7 +254,7 @@ function ScrapbookSheet({ letter }: { letter: Newsletter }) {
       <h1 className="fmt-scrap-title">{letter.name}</h1>
       <p className="fmt-scrap-tag">{letter.topics.join("  *  ")}</p>
       <p className="fmt-scrap-meta">
-        {sample.volNumber} · {sample.date} · {letter.cadence}
+        {sample.volNumber} · {nextIssueDate(letter.cadence)} · {letter.cadence}
       </p>
       <div className="fmt-scrap-collage">
         {sample.stories.map((story, index) => (
@@ -298,41 +345,106 @@ function StorefrontSheet({ letter }: { letter: Newsletter }) {
   );
 }
 
-/* ---- Executive Brief (swiss business grid) ---------------------------------- */
+/* ---- Skyline Dispatch: dark navy & sky-blue company summary --------------- */
 
-function ExecutiveSheet({ letter }: { letter: Newsletter }) {
+function SkylineSheet({ letter }: { letter: Newsletter }) {
   const { sample } = letter;
   const [lead, second, third] = sample.stories;
   return (
-    <div className="fmt-sheet fmt-exec">
-      <div className="fmt-exec-top">
-        <span>
-          {sample.date} / {sample.volNumber}
-        </span>
-        <span>www.goodmorningindian.in</span>
+    <div className="fmt-sheet fmt-sky">
+      <div className="fmt-sky-top">
+        <span>Good Morning Indian</span>
+        <i aria-hidden="true" />
+        <span>{nextIssueDate(letter.cadence)}</span>
       </div>
-      <h1 className="fmt-exec-masthead">{letter.name}</h1>
-      <div className="fmt-exec-grid">
-        <aside className="fmt-exec-side">
-          <h3>{letter.tagline}</h3>
-          <p>{letter.blurb}</p>
+      <div className="fmt-sky-head">
+        <h1 className="fmt-sky-masthead">{letter.name}</h1>
+        <span className="fmt-sky-block" aria-hidden="true" />
+      </div>
+      <Img story={lead} className="fmt-sky-hero" />
+      <div className="fmt-sky-grid">
+        <div className="fmt-sky-box">
+          <h2>{sample.headline}</h2>
           <p>{sample.leadDek}</p>
-          <Img story={lead} className="fmt-exec-side-img" />
-          <span className="fmt-exec-visit">↗ Visit site</span>
-        </aside>
-        <div className="fmt-exec-main">
-          <Img story={second} className="fmt-exec-hero" />
-          <div className="fmt-exec-bottom">
-            <h2 className="fmt-exec-headline">{sample.headline}</h2>
-            <div className="fmt-exec-cols">
-              <p>{second.summary}</p>
-              <div>
-                <Img story={third} className="fmt-exec-mini-img" />
-                <p>{third.summary}</p>
-              </div>
-            </div>
-          </div>
+          <p>{lead.summary}</p>
         </div>
+        <div className="fmt-sky-side">
+          <Img story={second} className="fmt-sky-side-img" />
+          <h3>{second.title}</h3>
+          <p>{second.summary}</p>
+          <h3>{third.title}</h3>
+          <p>{third.summary}</p>
+        </div>
+      </div>
+      <div className="fmt-sky-foot">{sample.footerTag}</div>
+    </div>
+  );
+}
+
+/* ---- Modern Digest: clean numbered briefing -------------------------------- */
+
+function DigestSheet({ letter }: { letter: Newsletter }) {
+  const { sample } = letter;
+  const [lead] = sample.stories;
+  return (
+    <div className="fmt-sheet fmt-digest">
+      <div className="fmt-dig-inner">
+        <div className="fmt-dig-top">
+          <span className="fmt-dig-logo">GMI</span>
+          <span className="fmt-dig-date">{nextIssueDate(letter.cadence)}</span>
+        </div>
+        <h1 className="fmt-dig-title">{letter.name}</h1>
+        <p className="fmt-dig-hello">
+          Good morning. Here&rsquo;s what matters from the {letter.topics[0].toLowerCase()} desk —
+          about a five-minute read.
+        </p>
+
+        <article className="fmt-dig-hero">
+          <Img story={lead} className="fmt-dig-hero-img" />
+          <span className="fmt-dig-pill">Top story</span>
+          <h2>{sample.headline}</h2>
+          <p>{sample.leadDek}</p>
+        </article>
+
+        <div className="fmt-dig-toc">
+          <h3>In this issue</h3>
+          <ol>
+            {sample.stories.map((story, index) => (
+              <li key={index}>
+                <span>{index + 1}</span>
+                {story.title}
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {sample.stories.map((story, index) => (
+          <article key={index} className="fmt-dig-story">
+            <Img story={story} className="fmt-dig-thumb" />
+            <div>
+              <span className="fmt-dig-tag">
+                {index + 1} · {story.tag}
+              </span>
+              <h3>{story.title}</h3>
+              <p>{story.summary}</p>
+            </div>
+          </article>
+        ))}
+
+        {sample.quote && (
+          <blockquote className="fmt-dig-quote">
+            <p>&ldquo;{sample.quote.text}&rdquo;</p>
+            <cite>{sample.quote.kicker}</cite>
+          </blockquote>
+        )}
+
+        <div className="fmt-dig-cta">
+          <span>{sample.ctaText}</span>
+        </div>
+        <p className="fmt-dig-foot">
+          You&rsquo;re receiving {letter.name} {letter.cadence.toLowerCase()} · Manage newsletters ·
+          Unsubscribe
+        </p>
       </div>
     </div>
   );
@@ -342,17 +454,21 @@ function ExecutiveSheet({ letter }: { letter: Newsletter }) {
 
 export default function EmailSheet({ format, letter }: { format: string; letter: Newsletter }) {
   switch (format) {
-    case "midnight":
-      return <MidnightSheet letter={letter} />;
+    case "corporate":
+      return <CorporateSheet letter={letter} />;
     case "heritage":
       return <HeritageSheet letter={letter} />;
     case "scrapbook":
       return <ScrapbookSheet letter={letter} />;
     case "storefront":
       return <StorefrontSheet letter={letter} />;
-    case "executive":
-      return <ExecutiveSheet letter={letter} />;
-    default:
+    case "skyline":
+      return <SkylineSheet letter={letter} />;
+    case "digest":
+      return <DigestSheet letter={letter} />;
+    case "classic":
       return <ClassicSheet letter={letter} />;
+    default:
+      return <DailySheet letter={letter} />;
   }
 }

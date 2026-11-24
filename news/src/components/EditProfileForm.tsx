@@ -278,6 +278,15 @@ export default function EditProfileForm({
         </div>
 
         <div className="edit-profile-grid">
+          <label className="cms-field wide">
+            <span className="cms-label">Display name</span>
+            <input
+              value={nextName}
+              maxLength={80}
+              autoComplete="nickname"
+              onChange={(e) => setNextName(e.target.value)}
+            />
+          </label>
           <label className="cms-field">
             <span className="cms-label">Date of birth</span>
             <input
@@ -331,15 +340,6 @@ export default function EditProfileForm({
                 onChange={(e) => setNextState(e.target.value)}
               />
             )}
-          </label>
-          <label className="cms-field wide">
-            <span className="cms-label">Display name</span>
-            <input
-              value={nextName}
-              maxLength={80}
-              autoComplete="nickname"
-              onChange={(e) => setNextName(e.target.value)}
-            />
           </label>
         </div>
       </div>

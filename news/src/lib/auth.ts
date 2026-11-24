@@ -19,6 +19,9 @@ export type SessionUser = {
   picture?: string;
   avatar?: string;
   googleId?: string;
+  // False for accounts created through Google — they have no local password.
+  hasPassword: boolean;
+  passwordChangedAt?: Date;
   createdAt: Date;
   role: Role;
   plan?: string;
@@ -50,6 +53,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       picture: user.picture,
       avatar: user.avatar,
       googleId: user.googleId,
+      hasPassword: Boolean(user.passwordHash),
+      passwordChangedAt: user.passwordChangedAt,
       createdAt: user.createdAt,
       role: normalizeRole(user.role, user.plan),
       plan: user.plan,

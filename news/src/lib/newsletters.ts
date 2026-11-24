@@ -1,9 +1,9 @@
 // The newsletters readers can subscribe to. `id` is stored on the subscriber's
 // `letters` array in Mongo, so keep ids stable once they ship.
 
-// Email template options for the example-email preview. `classic` is free;
-// every other format is a paid plan perk. `id` is stored on the subscriber's
-// `format` field, so keep ids stable once they ship.
+// Email template options for the example-email preview. The first entry is the
+// default and the only free format; every other format is a paid plan perk.
+// `id` is stored on the subscriber's `format` field, so keep ids stable.
 export type EmailFormat = {
   id: string;
   name: string;
@@ -12,13 +12,35 @@ export type EmailFormat = {
 };
 
 export const EMAIL_FORMATS: EmailFormat[] = [
-  { id: "classic", name: "Classic Broadsheet", style: "Vintage front page", premium: false },
-  { id: "midnight", name: "Midnight Bulletin", style: "Brutalist black & white", premium: true },
+  { id: "daily", name: "Daily Edition", style: "Black & white front page", premium: false },
+  { id: "classic", name: "Classic Broadsheet", style: "Vintage front page", premium: true },
+  { id: "corporate", name: "Corporate Report", style: "White, navy & orange business", premium: true },
   { id: "heritage", name: "Heritage Print", style: "Old-school club gazette", premium: true },
   { id: "scrapbook", name: "Scrapbook Post", style: "Collage & sticky notes", premium: true },
   { id: "storefront", name: "Storefront Weekly", style: "Modern promo magazine", premium: true },
-  { id: "executive", name: "Executive Brief", style: "Swiss business grid", premium: true },
+  { id: "skyline", name: "Skyline Dispatch", style: "Dark navy company summary", premium: true },
+  { id: "digest", name: "Modern Digest", style: "Clean numbered briefing", premium: true },
 ];
+
+// The issue date shown in email previews, computed from the cadence so it
+// always reads as a real upcoming issue, e.g. "FRI, NOV 28, 2026".
+const DAY_SHORT = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const DAY_LONG = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const MONTH_SHORT = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+export function nextIssueDate(cadence: string, from = new Date()): string {
+  const upper = cadence.toUpperCase();
+  const named = DAY_LONG.findIndex((day) => upper.includes(day));
+  let offset = 0; // daily cadences → today
+  if (named >= 0) {
+    offset = (named - from.getDay() + 7) % 7;
+  } else if (upper.includes("WEEKDAY")) {
+    // Next weekday: Fri → Mon, Sat → Mon, Sun → Mon, else today.
+    offset = [1, 0, 0, 0, 0, 3, 2][from.getDay()];
+  }
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + offset);
+  return `${DAY_SHORT[d.getDay()]}, ${MONTH_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
 
 export type SampleStory = {
   tag: string;

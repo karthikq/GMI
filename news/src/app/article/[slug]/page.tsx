@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ObjectId } from "mongodb";
 import { Fragment, Suspense } from "react";
 import ArticleCard, { ArticleImage } from "@/components/ArticleCard";
-import DeleteArticleButton from "@/components/DeleteArticleButton";
+import OwnerActions from "@/components/OwnerActions";
 import ReadTracker from "@/components/ReadTracker";
 import ReadingProgress from "@/components/ReadingProgress";
 import SaveButton from "@/components/SaveButton";
@@ -109,16 +109,11 @@ async function ArticleContent({ params, searchParams }: Props) {
                 initialSaved={saved}
                 signedIn={Boolean(user)}
               />
+              {isOwner && (
+                <OwnerActions slug={article.slug} published={article.status === "published"} />
+              )}
             </div>
           </div>
-          {isOwner && (
-            <div className="owner-actions">
-              <Link href={`/article/${article.slug}/edit`} className="button outline">
-                Edit story
-              </Link>
-              <DeleteArticleButton slug={article.slug} />
-            </div>
-          )}
         </header>
 
         <figure className="story-cover">

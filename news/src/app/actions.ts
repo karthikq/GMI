@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { signIn as naSignIn, signOut as naSignOut } from "@/auth";
 import { getSessionUser } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { passwordProblem } from "@/lib/passwordRules";
 import { NO_PHOTO } from "@/lib/avatar";
 import { COUNTRIES, INDIAN_STATES } from "@/lib/regions";
 import { isHostedImage, signUpload, uploadImage } from "@/lib/cloudinary";
@@ -213,8 +214,9 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
   if (!/^\S+@\S+\.\S+$/.test(email)) {
     errors.email = "Enter a valid email address.";
   }
-  if (password.length < 8) {
-    errors.password = "Password must be at least 8 characters.";
+  const weakness = passwordProblem(password);
+  if (weakness) {
+    errors.password = weakness;
   }
   if (password !== confirm) {
     errors.confirm = "Passwords don't match.";
@@ -254,6 +256,52 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
   } catch {}
   // Client completes the credentials sign-in; see note in signIn.
   return { ok: true, message: "Signing you in…" };
+}
+
+// Changes the signed-in reader's password. Accounts created through Google
+// have no password stored here, so there's nothing to change.
+export async function changePassword(input: {
+  current: string;
+  next: string;
+  confirm: string;
+}): Promise<{ ok: true } | { ok: false; errors: Record<string, string> }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, errors: { form: "Sign in to change your password." } };
+  const current = String(input.current ?? "");
+  const next = String(input.next ?? "");
+  const confirm = String(input.confirm ?? "");
+
+  const errors: Record<string, string> = {};
+  if (!current) errors.current = "Enter your current password.";
+  const weakness = passwordProblem(next);
+  if (weakness) errors.next = weakness;
+  if (next !== confirm) errors.confirm = "Passwords don't match.";
+  if (!errors.next && current && next === current) {
+    errors.next = "Choose a password different from your current one.";
+  }
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  try {
+    await connect();
+    const _id = new ObjectId(user.id);
+    const doc = await collections.users.findOne({ _id }, { projection: { passwordHash: 1 } });
+    if (!doc?.passwordHash) {
+      return {
+        ok: false,
+        errors: { form: "Your credentials are managed by your sign-in provider." },
+      };
+    }
+    if (!(await verifyPassword(current, doc.passwordHash))) {
+      return { ok: false, errors: { current: "Current password is incorrect." } };
+    }
+    await collections.users.updateOne(
+      { _id },
+      { $set: { passwordHash: await hashPassword(next), passwordChangedAt: new Date() } },
+    );
+  } catch {
+    return { ok: false, errors: { form: "Couldn't update your password. Try again." } };
+  }
+  return { ok: true };
 }
 
 // Admins invite journalists and editors by email; the role is assigned when

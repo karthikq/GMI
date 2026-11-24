@@ -3,14 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { signOutUser } from "@/app/actions";
 import type { Section } from "@/lib/api";
 
 export default function MobileMenu({
   sections,
   canWrite = false,
+  signedIn = false,
+  subscribed = false,
 }: {
   sections: Section[];
   canWrite?: boolean;
+  signedIn?: boolean;
+  subscribed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -80,7 +85,9 @@ export default function MobileMenu({
         >
           <div className="drawer-head">
             <Link href="/" className="drawer-brand">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo.png" alt="Good Morning Indian" className="brand-logo logo-light" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo-dark.png" alt="" aria-hidden="true" className="brand-logo logo-dark" />
             </Link>
             <button
@@ -125,21 +132,52 @@ export default function MobileMenu({
             })}
           </ul>
 
-          <div className="drawer-foot">
+          <p className="drawer-label">Explore</p>
+          <ul className="drawer-links">
+            <li>
+              <Link href="/">Today&apos;s edition</Link>
+            </li>
+            <li>
+              <Link href="/newsletters" aria-current={pathname === "/newsletters" ? "page" : undefined}>
+                Newsletters
+              </Link>
+            </li>
+            <li>
+              <Link href="/search" aria-current={pathname === "/search" ? "page" : undefined}>
+                Search the archive
+              </Link>
+            </li>
+            <li>
+              <Link href="/profile" aria-current={pathname === "/profile" ? "page" : undefined}>
+                Your profile
+              </Link>
+            </li>
             {canWrite && (
-              <Link href="/write" className="button outline">
-                Write a story
+              <li>
+                <Link href="/write" aria-current={pathname === "/write" ? "page" : undefined}>
+                  Write a story
+                </Link>
+              </li>
+            )}
+          </ul>
+
+          <div className="drawer-foot">
+            {signedIn ? (
+              <form action={signOutUser}>
+                <button type="submit" className="button outline">
+                  Sign out
+                </button>
+              </form>
+            ) : (
+              <Link href="/signin" className="button outline">
+                Sign in
               </Link>
             )}
-            <Link href="/profile" className="button outline">
-              Profile
-            </Link>
-            <Link href="/signin" className="button outline">
-              Sign in
-            </Link>
-            <Link href="/subscribe" className="button">
-              Subscribe
-            </Link>
+            {!subscribed && (
+              <Link href="/subscribe" className="button">
+                Subscribe
+              </Link>
+            )}
           </div>
         </aside>
       </div>

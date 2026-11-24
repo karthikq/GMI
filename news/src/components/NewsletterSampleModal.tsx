@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { chooseEmailFormat } from "@/app/actions";
 import EmailSheet from "./EmailSheets";
 import Modal from "./Modal";
@@ -39,8 +40,8 @@ function LockedPanel({ format }: { format: EmailFormat }) {
 }
 
 // Lets the reader preview each newsletter in the available email formats.
-// `classic` is free for everyone; the rest unlock with a paid plan, and a
-// signed-in reader's pick is saved to their subscription.
+// The default (first) format is free for everyone; the rest unlock with a
+// paid plan, and a signed-in reader's pick is saved to their subscription.
 export default function NewsletterSampleModal({
   letter,
   onClose,
@@ -54,7 +55,7 @@ export default function NewsletterSampleModal({
   premium: boolean;
   initialFormat?: string;
 }) {
-  const [format, setFormat] = useState(initialFormat ?? "classic");
+  const [format, setFormat] = useState(initialFormat ?? EMAIL_FORMATS[0].id);
   const active = EMAIL_FORMATS.find((item) => item.id === format) ?? EMAIL_FORMATS[0];
   const allowed = !active.premium || premium;
 
@@ -65,38 +66,47 @@ export default function NewsletterSampleModal({
     }
   };
 
-  return (
-    <Modal label={`${letter.name} — Example Email`} onClose={onClose} size="wide">
+  // Portalled to <body> so the card it opens from can't trap the fixed
+  // overlay (transforms/stacking) or leak its card styles into the preview.
+  return createPortal(
+    <Modal label={`${letter.name} — Choose format`} onClose={onClose} size="wide">
       <div className="email-preview-wrap">
         <div className="email-preview-badge">
-          <span>Email preview</span>
+          <span>Choose format</span>
           <strong>{letter.name}</strong>
           <span>Delivered {letter.cadence.toLowerCase()}</span>
         </div>
 
-        <div className="fmt-tabs" role="tablist" aria-label="Email format">
-          {EMAIL_FORMATS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={format === item.id}
-              className="fmt-tab"
-              onClick={() => select(item)}
-            >
-              {item.premium && <LockIcon />}
-              {item.name}
-              {item.premium && <span className="fmt-tab-tag">Paid</span>}
-            </button>
-          ))}
+        <div className="fmt-body">
+          <div className="fmt-tabs" role="tablist" aria-label="Email format">
+            {EMAIL_FORMATS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={format === item.id}
+                className="fmt-tab"
+                onClick={() => select(item)}
+              >
+                {item.premium && <LockIcon />}
+                {item.name}
+                {item.premium && <span className="fmt-tab-tag">Paid</span>}
+              </button>
+            ))}
+          </div>
+
+          <div className="fmt-preview">
+            {signedIn && allowed && active.premium && (
+              <p className="fmt-saved">
+                Format saved — your {letter.name} emails will use {active.name}.
+              </p>
+            )}
+
+            {allowed ? <EmailSheet format={active.id} letter={letter} /> : <LockedPanel format={active} />}
+          </div>
         </div>
-
-        {signedIn && allowed && active.premium && (
-          <p className="fmt-saved">Format saved — your {letter.name} emails will use {active.name}.</p>
-        )}
-
-        {allowed ? <EmailSheet format={active.id} letter={letter} /> : <LockedPanel format={active} />}
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }

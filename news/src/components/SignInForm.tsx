@@ -3,6 +3,7 @@
 import { signIn as clientSignIn } from "next-auth/react";
 import { useActionState, useEffect, useState } from "react";
 import { signIn } from "@/app/actions";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function SignInForm() {
   const [state, action, pending] = useActionState(signIn, null);
@@ -45,11 +46,9 @@ export default function SignInForm() {
       </label>
       <label>
         <span>Password</span>
-        <input
-          type="password"
+        <PasswordInput
           name="password"
           required
-          minLength={8}
           autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}

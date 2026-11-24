@@ -3,6 +3,8 @@
 import { signIn as clientSignIn } from "next-auth/react";
 import { useActionState, useEffect, useState } from "react";
 import { signUp } from "@/app/actions";
+import PasswordInput, { PasswordRules } from "@/components/PasswordInput";
+import { PASSWORD_MAX } from "@/lib/passwordRules";
 
 export default function SignUpForm() {
   const [state, action, pending] = useActionState(signUp, null);
@@ -71,29 +73,34 @@ export default function SignUpForm() {
       </label>
       <label>
         <span>Password</span>
-        <input
-          type="password"
+        <PasswordInput
           name="password"
           required
           minLength={8}
+          maxLength={PASSWORD_MAX}
           autoComplete="new-password"
           value={fields.password}
           onChange={update}
         />
+        {fields.password && <PasswordRules password={fields.password} />}
         {state?.errors?.password && <p className="field-error">{state.errors.password}</p>}
       </label>
       <label>
         <span>Confirm password</span>
-        <input
-          type="password"
+        <PasswordInput
           name="confirm"
           required
           minLength={8}
+          maxLength={PASSWORD_MAX}
           autoComplete="new-password"
           value={fields.confirm}
           onChange={update}
         />
-        {state?.errors?.confirm && <p className="field-error">{state.errors.confirm}</p>}
+        {fields.confirm && fields.confirm !== fields.password ? (
+          <p className="field-error">Passwords don&rsquo;t match.</p>
+        ) : (
+          state?.errors?.confirm && <p className="field-error">{state.errors.confirm}</p>
+        )}
       </label>
       <button type="submit" className="button" disabled={busy} aria-busy={busy}>
         {busy && <span className="spinner" aria-hidden="true" />}

@@ -299,7 +299,15 @@ async function ProfileContent() {
               </div>
               <div>
                 <dt>Password</dt>
-                <dd>Last changed 3 months ago</dd>
+                <dd>
+                  {!user
+                    ? "Last changed 3 months ago"
+                    : !user.hasPassword
+                      ? "Managed by your auth provider"
+                      : user.passwordChangedAt
+                        ? `Last changed ${joinedFormat.format(user.passwordChangedAt)}`
+                        : "Set when you joined"}
+                </dd>
               </div>
             </dl>
             {!user && (

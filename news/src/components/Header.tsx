@@ -67,16 +67,27 @@ async function AccountLink() {
   );
 }
 
-async function NavAvatar() {
+async function NavAccount() {
   const user = await getSessionUser();
-  if (!user) return null;
   return (
     <AccountMenu
-      name={user.name}
-      email={user.email}
-      image={profileImage(user)}
+      name={user?.name}
+      email={user?.email}
+      image={user ? profileImage(user) : undefined}
       variant="nav"
     />
+  );
+}
+
+const isPaidPlan = (plan?: string) => !!plan && plan !== "free";
+
+async function SubscribeLink() {
+  const user = await getSessionUser();
+  if (isPaidPlan(user?.plan)) return null;
+  return (
+    <Link href="/subscribe" className="button">
+      Subscribe
+    </Link>
   );
 }
 
@@ -97,7 +108,14 @@ async function Sections() {
 
 async function MobileNav() {
   const [sections, user] = await Promise.all([getSections(), getSessionUser()]);
-  return <MobileMenu sections={sections ?? []} canWrite={isEditorial(user?.role)} />;
+  return (
+    <MobileMenu
+      sections={sections ?? []}
+      canWrite={isEditorial(user?.role)}
+      signedIn={!!user}
+      subscribed={isPaidPlan(user?.plan)}
+    />
+  );
 }
 
 async function Ticker() {
@@ -234,11 +252,11 @@ export default function Header() {
               </button>
             </form>
             <ThemeToggle />
-            <Link href="/subscribe" className="button">
-              Subscribe
-            </Link>
             <Suspense>
-              <NavAvatar />
+              <SubscribeLink />
+            </Suspense>
+            <Suspense>
+              <NavAccount />
             </Suspense>
           </div>
         </div>
