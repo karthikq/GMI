@@ -138,18 +138,24 @@ async function Markets() {
   return (
     <div className="ticker ticker-markets">
       <div className="container ticker-inner">
-        <span className="ticker-label">Markets</span>
+        <Link href="/markets" className="ticker-label">
+          Markets
+        </Link>
         <div className="ticker-window">
           <ul className="ticker-track">
             {loop.map((market, index) => (
               <li key={index} aria-hidden={index >= markets.length}>
-                <Link href={`/markets/${marketSlug(market.name)}`} tabIndex={index >= markets.length ? -1 : 0}>
+                <Link
+                  href={`/markets/${marketSlug(market.name)}`}
+                  className="market-link"
+                  tabIndex={index >= markets.length ? -1 : 0}
+                >
                   {market.name}
+                  <span className="market-value">{market.value}</span>
+                  <span className={market.change >= 0 ? "market-change up" : "market-change down"}>
+                    {market.change >= 0 ? "▲" : "▼"} {Math.abs(market.change).toFixed(2)}%
+                  </span>
                 </Link>
-                <span className="market-value">{market.value}</span>
-                <span className={market.change >= 0 ? "market-change up" : "market-change down"}>
-                  {market.change >= 0 ? "▲" : "▼"} {Math.abs(market.change).toFixed(2)}%
-                </span>
               </li>
             ))}
           </ul>
@@ -170,7 +176,7 @@ export default function Header() {
                 <Link href="/">Today&apos;s edition</Link>
               </li>
               <li>
-                <a href="#subscribe">Newsletters</a>
+                <Link href="/newsletters">Newsletters</Link>
               </li>
               <li>
                 <Link href="/search">Search the archive</Link>

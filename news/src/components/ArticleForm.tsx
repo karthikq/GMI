@@ -11,7 +11,7 @@ import {
 } from "@/app/actions";
 import ArticleEditor from "@/components/ArticleEditor";
 import Modal from "@/components/Modal";
-import { ADULT_WORDS_MESSAGE, hasAdultWords } from "@/lib/censor";
+import { ADULT_WORDS_MESSAGE, findAdultWords, hasAdultWords } from "@/lib/censor";
 import type { EditableArticle, Section } from "@/lib/api";
 import { uploadArticleImage } from "@/lib/image";
 
@@ -21,6 +21,11 @@ const MAX_REVISIONS = 10;
 const MAX_TAGS = 8;
 const MAX_SOURCES = 8;
 const MAX_RELATED = 3;
+const MIN_TITLE = 10;
+const MIN_DEK = 10;
+const MIN_LEAD = 30;
+
+type FieldName = "title" | "section" | "dek" | "author" | "city" | "lead" | "body";
 
 type Source = { label: string; url: string };
 
@@ -81,6 +86,12 @@ const writeJson = (key: string, value: unknown) => {
 
 const hint = (text: string) => <small className="compose-hint">{text}</small>;
 
+const Req = () => (
+  <span className="req" aria-hidden="true">
+    *
+  </span>
+);
+
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="cms-panel">
@@ -122,6 +133,8 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
   const [confirmClear, setConfirmClear] = useState(false);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [flagged, setFlagged] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [pending, startTransition] = useTransition();
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
@@ -328,26 +341,65 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
   const wordCount = stripHtml(blocks.join(" ")).split(/\s+/).filter(Boolean).length;
 
   const validate = () => {
-    if (title.trim().length < 10) return "Give the story a headline of at least 10 characters.";
-    if (!section) return "Choose a desk for the story.";
-    if (dek.trim().length < 10) return "Write a standfirst of at least 10 characters.";
-    if (!author.trim()) return "Add a byline.";
-    if (!city.trim()) return "Add a dateline city.";
-    if (lead.trim().length < 30) return "The lead needs at least 30 characters.";
-    if (!blocks.length) return "Write at least one body block after the lead.";
-    return null;
+    const problems: Partial<Record<FieldName, string>> = {};
+    if (title.trim().length < MIN_TITLE)
+      problems.title = `At least ${MIN_TITLE} characters — ${title.trim().length} so far.`;
+    if (!section) problems.section = "Choose a desk.";
+    if (dek.trim().length < MIN_DEK)
+      problems.dek = `At least ${MIN_DEK} characters — ${dek.trim().length} so far.`;
+    if (!author.trim()) problems.author = "Add a byline.";
+    if (!city.trim()) problems.city = "Add a dateline city.";
+    if (lead.trim().length < MIN_LEAD)
+      problems.lead = `At least ${MIN_LEAD} characters — ${lead.trim().length} so far.`;
+    if (!blocks.length) problems.body = "Write at least one body block after the lead.";
+    return problems;
+  };
+
+  // Field errors only render after the first publish attempt, then update live
+  // as each field is fixed — same pattern as the banned-words flag below.
+  const fieldErrors = attempted ? validate() : {};
+
+  const flagNote = (text: string) => {
+    const words = flagged ? findAdultWords(text) : [];
+    return words.length ? (
+      <small className="compose-hint error" role="alert">
+        Not allowed: {words.join(", ")}
+      </small>
+    ) : null;
+  };
+
+  // A field's length/required error plus its banned-word note, or the hint.
+  const fieldNote = (field: FieldName, text: string, hintText?: string) => {
+    const problem = fieldErrors[field];
+    const flag = flagNote(text);
+    if (!problem && !flag) return hintText ? hint(hintText) : null;
+    return (
+      <>
+        {problem && (
+          <small className="compose-hint error" role="alert">
+            {problem}
+          </small>
+        )}
+        {flag}
+      </>
+    );
   };
 
   const publish = () => {
     if (hasAdultWords([title, dek, lead, ...blocks, ...tags, seoTitle, seoDesc].join(" "))) {
+      setFlagged(true);
+      setAttempted(true);
       setToast(ADULT_WORDS_MESSAGE);
       return;
     }
-    const problem = validate();
-    if (problem) {
-      setError(problem);
+    setFlagged(false);
+    const problems = validate();
+    if (Object.keys(problems).length) {
+      setAttempted(true);
+      setError("Fix the highlighted fields below.");
       return;
     }
+    setAttempted(false);
     setError(null);
     if (!editing) discardDraft();
     const payload: ArticleInput = {
@@ -448,55 +500,64 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
 
       <div className="cms-grid">
         <div className="cms-main">
-          <label className="cms-field">
+          <label className="cms-field" data-invalid={fieldErrors.title || undefined}>
             <span>
-              Headline <em>Name your story</em>
+              Headline <Req />
+              <em>Name your story · min {MIN_TITLE} characters</em>
             </span>
             <input
               type="text"
               value={title}
               maxLength={200}
+              required
               placeholder="The story in one line"
               onChange={(event) => {
                 setTitle(event.target.value);
                 if (!slugTouched) setSlug(slugify(event.target.value).slice(0, 80));
               }}
             />
-            {hint("Clear, specific and informative — skip clever wordplay that hides the news.")}
+            {fieldNote("title", title, "Clear, specific and informative — skip clever wordplay that hides the news.")}
           </label>
 
-          <label className="cms-field">
+          <label className="cms-field" data-invalid={fieldErrors.dek || undefined}>
             <span>
-              Standfirst <em>A short excerpt shown under the headline</em>
+              Standfirst <Req />
+              <em>A short excerpt shown under the headline · min {MIN_DEK} characters</em>
             </span>
             <textarea
               value={dek}
               maxLength={300}
               rows={2}
+              required
               placeholder="One or two sentences summarizing the story"
               onChange={(event) => setDek(event.target.value)}
             />
+            {fieldNote("dek", dek)}
           </label>
 
-          <label className="cms-field">
+          <label className="cms-field" data-invalid={fieldErrors.lead || undefined}>
             <span>
-              Lead <em>The opening paragraph</em>
+              Lead <Req />
+              <em>The opening paragraph · min {MIN_LEAD} characters</em>
             </span>
             <textarea
               value={lead}
               maxLength={600}
               rows={4}
+              required
               placeholder="Who did what, where, when, why and how — the whole story in one paragraph"
               onChange={(event) => setLead(event.target.value)}
             />
-            {hint("A reader who only reads this paragraph should still know the news.")}
+            {fieldNote("lead", lead, "A reader who only reads this paragraph should still know the news.")}
           </label>
 
-          <div className="cms-field">
+          <div className="cms-field" data-invalid={fieldErrors.body || undefined}>
             <span>
-              Content <em>Write your story</em>
+              Content <Req />
+              <em>Write your story</em>
             </span>
             <ArticleEditor html={blocks.join("")} onChange={setBlocks} />
+            {fieldNote("body", blocks.join(" "))}
             {hint(`${wordCount} words · about ${Math.max(1, Math.round(wordCount / 60))} min to read`)}
           </div>
         </div>
@@ -544,9 +605,11 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
           </Panel>
 
           <Panel title="Desk & tags">
-            <label className="cms-field small">
-              <span>Category</span>
-              <select value={section} onChange={(event) => setSection(event.target.value)}>
+            <label className="cms-field small" data-invalid={fieldErrors.section || undefined}>
+              <span>
+                Category <Req />
+              </span>
+              <select value={section} required onChange={(event) => setSection(event.target.value)}>
                 <option value="" disabled>
                   Choose a desk
                 </option>
@@ -556,6 +619,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
                   </option>
                 ))}
               </select>
+              {fieldNote("section", "")}
             </label>
             <div className="cms-field small">
               <span>Tags</span>
@@ -588,6 +652,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
                   />
                 )}
               </div>
+              {flagNote(tags.join(" "))}
             </div>
           </Panel>
 
@@ -632,27 +697,34 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
           </Panel>
 
           <Panel title="Author">
-            <label className="cms-field small">
-              <span>Byline</span>
+            <label className="cms-field small" data-invalid={fieldErrors.author || undefined}>
+              <span>
+                Byline <Req />
+              </span>
               <input
                 type="text"
                 value={author}
                 maxLength={80}
+                required
                 autoComplete="name"
                 placeholder="Your name"
                 onChange={(event) => setAuthor(event.target.value)}
               />
+              {fieldNote("author", author)}
             </label>
-            <label className="cms-field small">
-              <span>Dateline</span>
+            <label className="cms-field small" data-invalid={fieldErrors.city || undefined}>
+              <span>
+                Dateline <Req />
+              </span>
               <input
                 type="text"
                 value={city}
                 maxLength={80}
+                required
                 placeholder="City"
                 onChange={(event) => setCity(event.target.value)}
               />
-              {hint("Where the story is reported from.")}
+              {fieldNote("city", city, "Where the story is reported from.")}
             </label>
           </Panel>
 
@@ -666,7 +738,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
                 placeholder="Defaults to the headline"
                 onChange={(event) => setSeoTitle(event.target.value)}
               />
-              {hint(`${seoTitle.length}/70`)}
+              {flagNote(seoTitle) ?? hint(`${seoTitle.length}/70`)}
             </label>
             <label className="cms-field small">
               <span>Meta description</span>
@@ -677,7 +749,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
                 placeholder="Defaults to the standfirst"
                 onChange={(event) => setSeoDesc(event.target.value)}
               />
-              {hint(`${seoDesc.length}/160`)}
+              {flagNote(seoDesc) ?? hint(`${seoDesc.length}/160`)}
             </label>
           </Panel>
 

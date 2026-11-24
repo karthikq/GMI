@@ -1,12 +1,25 @@
 export const sections = [
+  { slug: "india", name: "India", blurb: "National reporting from across the country." },
   { slug: "world", name: "World", blurb: "Reporting from our correspondents in forty countries." },
+  { slug: "politics", name: "Politics", blurb: "Elections, policy and the people behind them." },
   { slug: "business", name: "Business", blurb: "Markets, companies and the people who move them." },
+  { slug: "markets", name: "Markets", blurb: "Indices, commodities and the day's numbers." },
   { slug: "technology", name: "Technology", blurb: "How software, chips and networks are reshaping daily life." },
-  { slug: "culture", name: "Culture", blurb: "Books, film, music and the arts." },
   { slug: "science", name: "Science", blurb: "Discoveries, climate and the natural world." },
+  { slug: "sports", name: "Sports", blurb: "Scores, transfers and the stories behind the games." },
+  { slug: "entertainment", name: "Entertainment", blurb: "Cinema, streaming, music and celebrity news." },
+  { slug: "culture", name: "Culture", blurb: "Books, film, music and the arts." },
+  { slug: "lifestyle", name: "Lifestyle", blurb: "Fashion, food, design and how we live." },
+  { slug: "health", name: "Health", blurb: "Medicine, wellness and the science of the body." },
+  { slug: "education", name: "Education", blurb: "Schools, universities and the business of learning." },
+  { slug: "environment", name: "Environment", blurb: "Climate, conservation and the living planet." },
+  { slug: "travel", name: "Travel", blurb: "Destinations, routes and the art of going places." },
+  { slug: "automobile", name: "Automobile", blurb: "Cars, bikes, EVs and the roads they run on." },
+  { slug: "gaming", name: "Gaming", blurb: "Consoles, PC, esports and the studios making them." },
   { slug: "opinion", name: "Opinion", blurb: "Arguments and ideas from our columnists." },
   { slug: "in-pictures", name: "In Pictures", blurb: "The week, seen through our photographers' lenses." },
   { slug: "longform", name: "Longform", blurb: "Stories that take their time." },
+  { slug: "economy", name: "Economy", blurb: "Growth, jobs, prices and the policy behind them." },
 ];
 
 const slugify = (title) =>

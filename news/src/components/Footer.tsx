@@ -36,6 +36,7 @@ export default function Footer() {
       <footer className="footer">
         <div className="container footer-inner">
           <div className="footer-brand">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-dark.png" alt="Good Morning Indian" className="brand-logo" />
             <p>
               An independent daily covering the world, business, technology and culture. All stories
@@ -58,7 +59,7 @@ export default function Footer() {
                 <Link href="/search">Search the archive</Link>
               </li>
               <li>
-                <a href="#subscribe">Morning briefing</a>
+                <Link href="/newsletters">All newsletters</Link>
               </li>
               <li>
                 <a href="#top">Back to top</a>

@@ -4,6 +4,7 @@ import { ADULT_WORDS_MESSAGE, hasAdultWords } from "./censor";
 import { isHostedImage, uploadImage } from "./cloudinary";
 import { collections, connect } from "./db";
 import { COMMODITIES, MARKET_RANGES, MARKET_SYMBOLS, marketSlug, type MarketRange } from "./markets";
+import { EMAIL_FORMATS, NEWSLETTERS } from "./newsletters";
 
 type StoredArticle = {
   slug: string;
@@ -23,6 +24,7 @@ type StoredArticle = {
   breaking?: boolean;
   image?: string;
   publishedAt: Date;
+  updatedAt?: Date;
   tickerOrder?: number;
   authorId?: string;
 };
@@ -193,12 +195,6 @@ function details(article: StoredArticle, sectionName: string) {
     authorBio: `${article.author} is a ${role.toLowerCase()} at Good Morning Indian, based in ${article.city}. Their reporting appears on the ${sectionName} desk.`,
     caption: `${article.city}. Photograph: Good Morning Indian`,
     tags: article.tags?.length ? article.tags : [sectionName, article.city],
-    ...(article.body.length >= 4
-      ? {
-          inlineImage: `https://picsum.photos/seed/${article.slug}-inline/1200/675`,
-          inlineCaption: `On the ground in ${article.city}. Photograph: Good Morning Indian`,
-        }
-      : {}),
   };
 }
 
@@ -249,6 +245,13 @@ function present(
       ? {
           body: article.lead ? [`<p>${escapeHtml(article.lead)}</p>`, ...article.body] : article.body,
           breaking: Boolean(article.breaking),
+          // Only set by edits — fresh stories have nothing "updated" to show.
+          ...(article.updatedAt
+            ? {
+                updatedAt: article.updatedAt.toISOString(),
+                updatedTime: timeFormat.format(article.updatedAt),
+              }
+            : {}),
           seo: article.seo,
           sources: article.sources,
           ...details(article, sectionName),
@@ -709,7 +712,12 @@ export async function updateArticle(
   await collections.articles.updateOne(
     { slug, authorId: userId },
     {
-      $set: { ...fields, ...(publishedAt ? { publishedAt } : {}), ...(image ? { image } : {}) },
+      $set: {
+        ...fields,
+        updatedAt: new Date(),
+        ...(publishedAt ? { publishedAt } : {}),
+        ...(image ? { image } : {}),
+      },
       ...(image === null ? { $unset: { image: "" } } : {}),
     },
   );
@@ -746,22 +754,112 @@ export async function fetchEditableArticle(slug: string, userId: string): Promis
   };
 }
 
-export async function insertSubscriber(emailField: unknown): Promise<{ ok: true } | { error: string }> {
+const VALID_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const newsletterId = (letter: string) =>
+  NEWSLETTERS.some((item) => item.id === letter) ? letter : "briefing";
+
+// Records an email on the subscribers list and enrols it in one newsletter.
+// `added` tells callers the letter is new — used to send the confirmation
+// email only once, not on every repeat click.
+export async function insertSubscriber(
+  emailField: unknown,
+  letter = "briefing",
+): Promise<{ ok: true; added: boolean } | { error: string }> {
   await connect();
   const email = String(emailField || "").trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!VALID_EMAIL.test(email)) {
     return { error: "Enter a valid email address." };
   }
 
   try {
-    await collections.subscribers.updateOne(
+    const result = await collections.subscribers.updateOne(
       { email },
-      { $setOnInsert: { email, subscribedAt: new Date() } },
+      {
+        $addToSet: { letters: newsletterId(letter) },
+        $setOnInsert: { email, subscribedAt: new Date() },
+      },
       { upsert: true },
     );
+    return { ok: true, added: result.upsertedCount > 0 || result.modifiedCount > 0 };
   } catch (error) {
     // Two simultaneous sign-ups for one address: the other request already saved it.
     if ((error as { code?: number }).code !== 11000) throw error;
+    return { ok: true, added: false };
   }
+}
+
+// The newsletters an address is subscribed to. Missing docs / older docs
+// without a letters array simply have none.
+export async function fetchSubscriberLetters(emailField: unknown): Promise<string[]> {
+  await connect();
+  await io();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!email) return [];
+  const doc = await collections.subscribers.findOne(
+    { email },
+    { projection: { letters: 1 } },
+  );
+  return Array.isArray(doc?.letters)
+    ? doc.letters.filter((id): id is string => typeof id === "string")
+    : [];
+}
+
+// Adds or removes one newsletter on the address' subscription. Unsubscribing
+// never creates a doc; subscribing upserts so guest sign-ups work too.
+// `added` is true only when a subscribe actually changed the stored list.
+export async function setNewsletterSubscription(
+  emailField: unknown,
+  letter: string,
+  on: boolean,
+): Promise<{ ok: true; added?: boolean } | { error: string }> {
+  await connect();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!VALID_EMAIL.test(email)) {
+    return { error: "Enter a valid email address." };
+  }
+  if (!NEWSLETTERS.some((item) => item.id === letter)) {
+    return { error: "Unknown newsletter." };
+  }
+  const result = await collections.subscribers.updateOne(
+    { email },
+    on
+      ? { $addToSet: { letters: letter }, $setOnInsert: { email, subscribedAt: new Date() } }
+      : { $pull: { letters: letter } },
+    { upsert: on },
+  );
+  return { ok: true, added: on && (result.upsertedCount > 0 || result.modifiedCount > 0) };
+}
+
+// The email format an address last picked on /newsletters, if any.
+export async function fetchSubscriberFormat(emailField: unknown): Promise<string | undefined> {
+  await connect();
+  await io();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!email) return undefined;
+  const doc = await collections.subscribers.findOne({ email }, { projection: { format: 1 } });
+  return typeof doc?.format === "string" && EMAIL_FORMATS.some((f) => f.id === doc.format)
+    ? doc.format
+    : undefined;
+}
+
+// Stores the address' chosen email format. Entitlement is checked by the
+// caller (server action) against the reader's plan.
+export async function setSubscriberFormat(
+  emailField: unknown,
+  format: string,
+): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!VALID_EMAIL.test(email)) {
+    return { error: "Enter a valid email address." };
+  }
+  if (!EMAIL_FORMATS.some((item) => item.id === format)) {
+    return { error: "Unknown format." };
+  }
+  await collections.subscribers.updateOne(
+    { email },
+    { $set: { format }, $setOnInsert: { email, subscribedAt: new Date() } },
+    { upsert: true },
+  );
   return { ok: true };
 }

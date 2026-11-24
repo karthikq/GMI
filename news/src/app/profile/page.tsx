@@ -5,14 +5,16 @@ import { Suspense } from "react";
 import ArticleCard from "@/components/ArticleCard";
 import AvatarImg from "@/components/AvatarImg";
 import InviteForm from "@/components/InviteForm";
+import NewsletterPrefs from "@/components/NewsletterPrefs";
 import { Offline, PageSkeleton } from "@/components/States";
 import { signOutUser } from "@/app/actions";
 import { getArticles, getSections } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { profileImage } from "@/lib/avatar";
+import { NEWSLETTERS } from "@/lib/newsletters";
 import { isEditorial } from "@/lib/roles";
 import { fetchStoryList } from "@/lib/analytics";
-import { fetchArticlesBySlugs } from "@/lib/queries";
+import { fetchArticlesBySlugs, fetchSubscriberLetters } from "@/lib/queries";
 import { getReaderStats, getRecentReadSlugs, getSavedSlugs } from "@/lib/reading";
 
 export const metadata: Metadata = { title: "Your profile" };
@@ -31,11 +33,8 @@ const reader = {
   following: ["world", "technology", "science", "longform"],
 };
 
-const newsletters = [
-  { id: "briefing", name: "The morning briefing", blurb: "Five stories before 7am, daily.", on: true },
-  { id: "markets", name: "Markets close", blurb: "The day in numbers, weekdays at 6pm.", on: false },
-  { id: "weekend", name: "Weekend longform", blurb: "Our best long reads, every Saturday.", on: true },
-];
+// Which newsletters the sample guest profile pretends to receive.
+const SAMPLE_LETTERS = new Set(["briefing", "weekend"]);
 
 const joinedFormat = new Intl.DateTimeFormat("en-GB", {
   month: "long",
@@ -58,14 +57,17 @@ async function ProfileContent() {
   let saved: Awaited<ReturnType<typeof fetchArticlesBySlugs>>;
   let history: Awaited<ReturnType<typeof fetchArticlesBySlugs>>;
   let stats: { storiesRead: number; saved: number; streak: number; desks: Set<string> };
+  let subscribed = SAMPLE_LETTERS;
 
   if (user) {
     const userId = new ObjectId(user.id);
-    const [readerStats, savedSlugs, readSlugs] = await Promise.all([
+    const [readerStats, savedSlugs, readSlugs, letterIds] = await Promise.all([
       getReaderStats(userId),
       getSavedSlugs(userId),
       getRecentReadSlugs(userId),
+      fetchSubscriberLetters(user.email),
     ]);
+    subscribed = new Set(letterIds);
     [saved, history] = await Promise.all([
       fetchArticlesBySlugs(savedSlugs),
       fetchArticlesBySlugs(readSlugs),
@@ -268,19 +270,20 @@ async function ProfileContent() {
 
           <section className="side-block">
             <h2 className="rule-heading">Newsletters</h2>
-            <ul className="profile-prefs">
-              {newsletters.map((item) => (
-                <li key={item.id}>
-                  <label>
-                    <input type="checkbox" name={item.id} defaultChecked={item.on} />
-                    <span>
-                      <strong>{item.name}</strong>
-                      {item.blurb}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+            <NewsletterPrefs
+              editable={Boolean(user)}
+              items={NEWSLETTERS.map((letter) => ({
+                id: letter.id,
+                name: letter.name,
+                blurb: letter.cadence,
+                on: subscribed.has(letter.id),
+              }))}
+            />
+            <p className="side-note">
+              <Link href="/newsletters" className="more">
+                Browse all newsletters →
+              </Link>
+            </p>
           </section>
 
           <section className="side-block">

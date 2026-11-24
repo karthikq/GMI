@@ -90,17 +90,26 @@ async function ArticleContent({ params, searchParams }: Props) {
                 {article.authorRole && <>{article.authorRole} · </>}
                 <time dateTime={article.publishedAt}>
                   {dateFormat.format(new Date(article.publishedAt))}, {article.publishedTime}
-                </time>{" "}
+                </time>
+                {article.updatedAt && (
+                  <time dateTime={article.updatedAt}>
+                    {" "}
+                    · Updated {dateFormat.format(new Date(article.updatedAt))},{" "}
+                    {article.updatedTime}
+                  </time>
+                )}{" "}
                 · {article.readMinutes} min read
               </p>
             </div>
-            <ShareButtons title={article.title} />
-            <SaveButton
-              slug={article.slug}
-              section={article.section}
-              initialSaved={saved}
-              signedIn={Boolean(user)}
-            />
+            <div className="story-actions">
+              <ShareButtons title={article.title} />
+              <SaveButton
+                slug={article.slug}
+                section={article.section}
+                initialSaved={saved}
+                signedIn={Boolean(user)}
+              />
+            </div>
           </div>
           {isOwner && (
             <div className="owner-actions">
@@ -125,14 +134,6 @@ async function ArticleContent({ params, searchParams }: Props) {
                   <p>{quote}</p>
                   <cite>From the story</cite>
                 </blockquote>
-              )}
-              {article.inlineImage && index === 3 && (
-                <figure className="story-figure">
-                  {/* Remote placeholder photo, as in ArticleImage. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={article.inlineImage} alt="" loading="lazy" />
-                  {article.inlineCaption && <figcaption className="figcap">{article.inlineCaption}</figcaption>}
-                </figure>
               )}
               {/* Body blocks are sanitized HTML from the newsroom editor. */}
               <div dangerouslySetInnerHTML={{ __html: paragraph }} />

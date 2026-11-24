@@ -10,11 +10,19 @@ export const client = (globalForMongo.mongoClient ??= new MongoClient(
 ));
 export const db = client.db(process.env.MONGODB_DB || "meridian");
 
+// Older documents may predate `letters`/`format`; readers guard accordingly.
+export type SubscriberDoc = {
+  email: string;
+  subscribedAt: Date;
+  letters: string[];
+  format?: string;
+};
+
 export const collections = {
   sections: db.collection("sections"),
   articles: db.collection("articles"),
   markets: db.collection("markets"),
-  subscribers: db.collection("subscribers"),
+  subscribers: db.collection<SubscriberDoc>("subscribers"),
   users: db.collection("users"),
   sessions: db.collection("sessions"),
   bookmarks: db.collection("bookmarks"),
@@ -56,9 +64,9 @@ export async function connect(): Promise<void> {
   await io();
   ready ??= (async () => {
     await client.connect();
-    const { sections, articles, subscribers, users, sessions, bookmarks, reads, invites } = collections;
+    const { sections: sectionCollection, articles, subscribers, users, sessions, bookmarks, reads, invites } = collections;
     await Promise.all([
-      sections.createIndex({ slug: 1 }, { unique: true }),
+      sectionCollection.createIndex({ slug: 1 }, { unique: true }),
       articles.createIndex({ slug: 1 }, { unique: true }),
       articles.createIndex({ section: 1, publishedAt: -1 }),
       articles.createIndex({ publishedAt: -1 }),
@@ -86,6 +94,20 @@ export async function connect(): Promise<void> {
       const counts = await seed();
       console.log(`Empty database: seeded ${counts.articles} sample articles.`);
     }
+    // Older databases only carry the original desks; upsert the canonical list
+    // so new desks appear without touching their stored stories.
+    await Promise.all(
+      sections.map((section, order) =>
+        collections.sections.updateOne(
+          { slug: section.slug },
+          {
+            $set: { order },
+            $setOnInsert: { name: section.name, blurb: section.blurb },
+          },
+          { upsert: true },
+        ),
+      ),
+    );
   })();
   return ready;
 }

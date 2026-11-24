@@ -20,6 +20,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { uploadArticleImage } from "@/lib/image";
+import { ADULT_WORDS_PATTERN } from "@/lib/censor";
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ");
 
@@ -79,6 +80,36 @@ const FindReplace = Extension.create({
                 }),
               ),
             );
+          },
+        },
+      }),
+    ];
+  },
+});
+
+/* Words blocked on publish (lib/censor) are underlined as the writer types so
+   the offending text is already visible when the publish check fails. */
+
+const FlaggedWords = Extension.create({
+  name: "flaggedWords",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          decorations: (state) => {
+            const hits: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              if (!node.isText || !node.text) return;
+              for (const m of node.text.matchAll(ADULT_WORDS_PATTERN)) {
+                const at = m.index ?? 0;
+                hits.push(
+                  Decoration.inline(pos + at, pos + at + m[0].length, {
+                    class: "flagged-word",
+                  }),
+                );
+              }
+            });
+            return DecorationSet.create(state.doc, hits);
           },
         },
       }),
@@ -735,6 +766,7 @@ export default function ArticleEditor({
       ResizableYoutube.configure({ nocookie: true, width: 640, height: 360 }),
       IframeEmbed,
       FindReplace,
+      FlaggedWords,
     ],
     content: html,
     immediatelyRender: false,

@@ -9,7 +9,8 @@ import { NO_PHOTO } from "@/lib/avatar";
 import { COUNTRIES, INDIAN_STATES } from "@/lib/regions";
 import { isHostedImage, signUpload, uploadImage } from "@/lib/cloudinary";
 import { collections, connect } from "@/lib/db";
-import { sendWelcomeEmail } from "@/lib/email";
+import { sendNewsletterConfirmEmail, sendWelcomeEmail } from "@/lib/email";
+import { EMAIL_FORMATS, NEWSLETTERS } from "@/lib/newsletters";
 import { PLANS } from "@/lib/plans";
 import { INVITABLE_ROLES, isEditorial, type Role } from "@/lib/roles";
 import { recordRead, toggleBookmark } from "@/lib/reading";
@@ -18,6 +19,8 @@ import {
   insertArticle,
   insertSubscriber,
   searchArticles as searchArticleDocs,
+  setNewsletterSubscription,
+  setSubscriberFormat,
   updateArticle,
 } from "@/lib/queries";
 import type { ArticleInput } from "@/lib/queries";
@@ -31,10 +34,18 @@ export type FormState = {
 } | null;
 
 export async function subscribe(_previous: FormState, formData: FormData): Promise<FormState> {
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   try {
-    const result = await insertSubscriber(formData.get("email"));
+    const result = await insertSubscriber(email, "briefing");
     if ("error" in result) {
       return { ok: false, message: result.error };
+    }
+    if (result.added) {
+      try {
+        await sendNewsletterConfirmEmail(email, "The Morning Briefing", "weekdays before 7am");
+      } catch {}
     }
     return {
       ok: true,
@@ -45,6 +56,78 @@ export async function subscribe(_previous: FormState, formData: FormData): Promi
       ok: false,
       message: "Can't reach the news server. Try again shortly.",
     };
+  }
+}
+
+// Guest sign-up for a single newsletter from its card on /newsletters.
+export async function subscribeLetter(_previous: FormState, formData: FormData): Promise<FormState> {
+  const letter = String(formData.get("letter") ?? "");
+  const found = NEWSLETTERS.find((item) => item.id === letter);
+  if (!found) {
+    return { ok: false, message: "Pick a newsletter to subscribe to." };
+  }
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  try {
+    const result = await insertSubscriber(email, letter);
+    if ("error" in result) {
+      return { ok: false, message: result.error };
+    }
+    if (result.added) {
+      try {
+        await sendNewsletterConfirmEmail(email, found.name, found.cadence);
+      } catch {}
+    }
+    return { ok: true, message: `You're subscribed to ${found.name}.` };
+  } catch {
+    return {
+      ok: false,
+      message: "Can't reach the news server. Try again shortly.",
+    };
+  }
+}
+
+// Toggles one newsletter for the signed-in reader, keyed on their email.
+export async function setNewsletter(
+  letter: string,
+  on: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Sign in to manage newsletters." };
+  try {
+    const result = await setNewsletterSubscription(user.email, letter, on);
+    if ("error" in result) return result;
+    if (result.added) {
+      const found = NEWSLETTERS.find((item) => item.id === letter);
+      if (found) {
+        try {
+          await sendNewsletterConfirmEmail(user.email, found.name, found.cadence);
+        } catch {}
+      }
+    }
+    return result;
+  } catch {
+    return { error: "Couldn't update your newsletters. Try again." };
+  }
+}
+
+// Picks the reader's preferred email template. Premium formats require a paid
+// plan — the same gate is enforced client-side, but this is the real check.
+export async function chooseEmailFormat(
+  format: string,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Sign in to choose a format." };
+  const found = EMAIL_FORMATS.find((item) => item.id === format);
+  if (!found) return { error: "Unknown format." };
+  if (found.premium && user.plan !== "premium" && user.plan !== "premium-plus") {
+    return { error: "That's a premium format — upgrade your plan to use it." };
+  }
+  try {
+    return await setSubscriberFormat(user.email, format);
+  } catch {
+    return { error: "Couldn't save your format. Try again." };
   }
 }
 

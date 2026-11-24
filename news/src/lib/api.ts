@@ -26,6 +26,8 @@ export type Article = {
   image: string;
   publishedAt: string;
   publishedTime: string;
+  updatedAt?: string;
+  updatedTime?: string;
   ago: string;
   readMinutes: number;
   reads: number;
@@ -38,8 +40,6 @@ export type Article = {
   authorBio?: string;
   caption?: string;
   tags?: string[];
-  inlineImage?: string;
-  inlineCaption?: string;
 };
 
 export type Weather = {
