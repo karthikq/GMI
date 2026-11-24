@@ -10,7 +10,7 @@ export default function ArchiveSection({ initial }: { initial: Article[] }) {
   const [days, setDays] = useState(7);
   const [articles, setArticles] = useState(initial);
   const [loading, setLoading] = useState(false);
-      console.log(articles,'articlesarticles');
+
   const pick = async (next: number) => {
     setDays(next);
     setLoading(true);
