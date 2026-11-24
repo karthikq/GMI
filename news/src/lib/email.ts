@@ -47,7 +47,7 @@ export async function sendWelcomeEmail(to: string, name: string): Promise<void> 
     body: JSON.stringify({
       sender: {
         name: process.env.BREVO_SENDER_NAME ?? "Good Morning Indian",
-        email: process.env.BREVO_SENDER_EMAIL ?? "no-reply@goodmorningindian.com",
+        email: process.env.BREVO_SENDER_EMAIL ?? "jskarthik10@gmail.com",
       },
       to: [{ email: to, name }],
       subject: "Welcome to Good Morning Indian",
