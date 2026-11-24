@@ -200,7 +200,7 @@ async function ProfileContent() {
             </section>
           )}
 
-          <section>
+          <section className="section-block">
             <div className="section-head">
               <h2>Saved stories</h2>
             </div>
