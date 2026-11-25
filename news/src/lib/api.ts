@@ -56,7 +56,7 @@ export type Edition = {
   updated: string;
   stories: number;
   weather: Weather | null;
-  market: { name: string; change: number };
+  market: { name: string; change: number; value?: string };
 };
 
 export type TickerItem = { slug: string; title: string; time: string };

@@ -338,13 +338,24 @@ export async function fetchEdition(): Promise<Edition> {
     getMarketDocs(),
     getWeather(),
   ]);
+  // The header chip shows the first market (Nifty 50) with a live quote —
+  // same 5-minute-cached Yahoo call the markets strip uses, seeded figures
+  // as fallback when Yahoo can't be reached.
+  const symbol = market && MARKET_SYMBOLS[market.name];
+  const quote = symbol ? await chart(symbol, "1d") : null;
   return {
     name: editionName(now.getHours()),
     date: dateFormat.format(now),
     updated: timeFormat.format(now),
     stories,
     weather,
-    market: (market ? { name: market.name, change: market.change } : null) as Edition["market"],
+    market: (market
+      ? {
+          name: market.name,
+          change: quote ? Number(quote.change.toFixed(2)) : market.change,
+          value: quote ? formatPrice(quote.price) : market.value,
+        }
+      : null) as Edition["market"],
   };
 }
 

@@ -34,7 +34,7 @@ async function EditionRight() {
     <>
       <LiveWeather fallback={edition.weather} />
       <span>
-        {edition.market.name}{" "}
+        {edition.market.name} {edition.market.value}{" "}
         <b className={up ? "up" : "down"}>
           {up ? "▲" : "▼"} {Math.abs(edition.market.change)}%
         </b>

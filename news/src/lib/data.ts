@@ -558,7 +558,7 @@ export const articles = [
 
 // Sample figures; this demo has no live market feed.
 export const markets = [
-  { name: "Nifty 50", value: "24,812.4", change: 0.42 },
+  { name: "Nifty 50", value: "24,812.4", change: 0.2 },
   { name: "Sensex", value: "81,340.9", change: 0.38 },
   { name: "S&P 500", value: "5,412.8", change: 0.61 },
   { name: "FTSE 100", value: "8,146.2", change: -0.15 },
