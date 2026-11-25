@@ -2,69 +2,102 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import type { MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Section } from "@/lib/api";
 
-const VISIBLE_COUNT = 8;
+// First paint fallback — the layout effect recomputes the real count from
+// available width before the reader notices (useLayoutEffect warns on SSR,
+// hence the isomorphic pick).
+const INITIAL_COUNT = 8;
+
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export default function NavLinks({ sections }: { sections: Section[] }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const sizerRef = useRef<HTMLUListElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  // Stores the pathname the menu was opened on — a route change closes it.
+  const [openedOn, setOpenedOn] = useState<string | null>(null);
+  const open = openedOn === pathname;
+  const [fit, setFit] = useState(() => Math.min(INITIAL_COUNT, sections.length));
+
+  const visible = sections.slice(0, fit);
+  const overflow = sections.slice(fit);
+
+  // Priority+ nav: measure each section link from a hidden duplicate list and
+  // show only as many as fit beside the More button — never a clipped item or
+  // a stray gap, no matter how crowded the bar gets (Subscribe button, etc).
+  useIsoLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const sizer = sizerRef.current;
+    if (!wrap || !sizer) return;
+
+    const update = () => {
+      const items = [...sizer.children] as HTMLElement[];
+      if (!items.length) return;
+      const gap = parseFloat(getComputedStyle(sizer).columnGap) || 0;
+      const moreWidth = moreRef.current?.offsetWidth ?? 64;
+      const prefix = [0];
+      items.forEach((item, i) => {
+        prefix.push(prefix[i] + item.offsetWidth + (i ? gap : 0));
+      });
+      const available = wrap.clientWidth;
+      let count = items.length;
+      while (count > 0) {
+        const need = prefix[count] + (count < items.length ? gap + moreWidth : 0);
+        if (need <= available) break;
+        count -= 1;
+      }
+      setFit(count);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(wrap);
+    document.fonts?.ready.then(update).catch(() => {});
+    return () => observer.disconnect();
+  }, [sections]);
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    const close = (event: MouseEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpenedOn(null);
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+    const esc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenedOn(null);
     };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
     };
   }, [open]);
 
-  // On the home page, jump to the section's block instead of leaving the page.
-  const scrollToSection = (event: MouseEvent<HTMLAnchorElement>, slug: string) => {
-    if (pathname !== "/") return;
-    const target = document.getElementById(slug);
-    if (!target) return;
-    event.preventDefault();
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    history.replaceState(null, "", `#${slug}`);
-  };
-
-  const sectionLink = (section: Section, onNavigate?: () => void) => {
+  const sectionLink = (section: Section) => {
     const href = `/section/${section.slug}`;
     return (
-      <Link
-        key={section.slug}
-        href={href}
-        aria-current={pathname === href ? "page" : undefined}
-        role={onNavigate ? "menuitem" : undefined}
-        onClick={(event) => {
-          scrollToSection(event, section.slug);
-          onNavigate?.();
-        }}
-      >
+      <Link href={href} aria-current={pathname === href ? "page" : undefined}>
         {section.name}
       </Link>
     );
   };
 
-  const visible = sections.slice(0, VISIBLE_COUNT);
-  const overflow = sections.slice(VISIBLE_COUNT);
-
   return (
-    <div className="nav-links-wrap" ref={root}>
+    <div className="nav-links-wrap" ref={wrapRef}>
       <ul className="nav-links">
         {visible.map((section) => (
           <li key={section.slug}>{sectionLink(section)}</li>
+        ))}
+      </ul>
+      {/* Hidden copy used only for width measurements — invisible, out of
+          flow, and unreachable for keyboard or screen readers. */}
+      <ul className="nav-links nav-links-sizer" ref={sizerRef} aria-hidden="true">
+        {sections.map((section) => (
+          <li key={section.slug}>
+            <span>{section.name}</span>
+          </li>
         ))}
       </ul>
       {/* Pinned outside the scrolling list so a crowded nav (e.g. the
@@ -72,10 +105,11 @@ export default function NavLinks({ sections }: { sections: Section[] }) {
       {overflow.length > 0 && (
         <button
           type="button"
+          ref={moreRef}
           className="nav-more"
           aria-haspopup="menu"
           aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => setOpenedOn(open ? null : pathname)}
         >
           More
           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
@@ -92,7 +126,11 @@ export default function NavLinks({ sections }: { sections: Section[] }) {
       )}
       {open && overflow.length > 0 && (
         <div className="nav-more-panel" role="menu">
-          {overflow.map((section) => sectionLink(section, () => setOpen(false)))}
+          {overflow.map((section) => (
+            <Link key={section.slug} role="menuitem" href={`/section/${section.slug}`}>
+              {section.name}
+            </Link>
+          ))}
         </div>
       )}
     </div>

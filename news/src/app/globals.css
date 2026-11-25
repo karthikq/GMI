@@ -766,6 +766,28 @@ main [id] {
   gap: 28px;
 }
 
+/* Hidden duplicate of the section row — only for measuring link widths so
+   NavLinks can show exactly what fits and fold the rest into "More". */
+.nav-links-sizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.nav-links-sizer span {
+  display: block;
+  padding: 18px 0 15px;
+  border-bottom: 3px solid transparent;
+  font-family: var(--font-heading), sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .nav-more {
   display: flex;
   align-items: center;
