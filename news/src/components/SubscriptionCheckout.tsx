@@ -5,23 +5,26 @@ import { useState } from "react";
 import { confirmPlan, startSubscription } from "@/app/actions";
 import type { Plan } from "@/lib/plans";
 
-type RazorpayInstance = {
-  open: () => void;
+type CashfreeInstance = {
+  subscriptionsCheckout: (opts: {
+    subsSessionId: string;
+    redirectTarget: string;
+  }) => Promise<{ error?: { message?: string } }>;
 };
 
 declare global {
   interface Window {
-    Razorpay?: new (opts: Record<string, unknown>) => RazorpayInstance;
+    Cashfree?: (opts: { mode: string }) => CashfreeInstance;
   }
 }
 
 let sdkPromise: Promise<void> | null = null;
-function loadRazorpaySdk(): Promise<void> {
-  if (typeof window !== "undefined" && window.Razorpay) return Promise.resolve();
+function loadCashfreeSdk(): Promise<void> {
+  if (typeof window !== "undefined" && window.Cashfree) return Promise.resolve();
   if (!sdkPromise) {
     sdkPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
       script.onload = () => resolve();
       script.onerror = () => reject(new Error("Couldn't load the payment page."));
       document.head.appendChild(script);
@@ -34,7 +37,6 @@ export default function SubscriptionCheckout({
   plan,
   name,
   email,
-  phone,
 }: {
   plan: Plan;
   name: string;
@@ -52,48 +54,45 @@ export default function SubscriptionCheckout({
       const result = await startSubscription(plan.id);
       if ("error" in result) {
         setError(result.error);
+        setBusy(false);
         return;
       }
-      await loadRazorpaySdk();
-      const razorpay = new window.Razorpay!({
-        key: result.keyId,
-        subscription_id: result.subscriptionId,
-        name: "Good Morning Indian",
-        description: `${plan.name} — ${plan.price}/month`,
-        prefill: { name, email, ...(phone ? { contact: phone } : {}) },
-        notes: { site_plan: plan.id },
-        theme: { color: "#b5002d" },
-        // Runs once the reader authorises the mandate in the popup.
-        handler: async (response: { razorpay_subscription_id?: string }) => {
-          const subId = response.razorpay_subscription_id ?? result.subscriptionId;
-          const out = await confirmPlan(subId);
-          router.push(`/subscribe?status=${out.status}`);
-        },
-        modal: {
-          ondismiss: () => setBusy(false),
-        },
+      await loadCashfreeSdk();
+      const cashfree = window.Cashfree!({ mode: result.mode });
+      // _self sends this tab to Cashfree's hosted checkout; on completion it
+      // returns through /subscribe/callback, which verifies the mandate and
+      // lands on /subscribe?status=…. (_modal silently falls back to a new
+      // tab, which would leave this screen hanging on "Connecting…".)
+      const out = await cashfree.subscriptionsCheckout({
+        subsSessionId: result.sessionId,
+        redirectTarget: "_self",
       });
-      razorpay.open();
+      if (out.error?.message) {
+        setError(out.error.message);
+        setBusy(false);
+        return;
+      }
+      const done = await confirmPlan(result.subscriptionId);
+      router.push(`/subscribe?status=${done.status}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't open the payment page.");
       setBusy(false);
     }
-    // busy clears via the checkout handler or modal.ondismiss.
   }
 
   return (
     <div className="checkout-card">
+      <div className="checkout-head">
+        <div>
+          <p className="kicker">Autopay setup</p>
+          <h2>{plan.name}</h2>
+        </div>
+        <p className="checkout-price">
+          {plan.price}
+          <span>{plan.term}</span>
+        </p>
+      </div>
       <dl className="checkout-summary">
-        <div>
-          <dt>Plan</dt>
-          <dd>{plan.name}</dd>
-        </div>
-        <div>
-          <dt>Amount</dt>
-          <dd>
-            {plan.price} {plan.term.toLowerCase()}
-          </dd>
-        </div>
         <div>
           <dt>Billing</dt>
           <dd>Autopay — UPI, card or eMandate</dd>
@@ -110,9 +109,9 @@ export default function SubscriptionCheckout({
         {busy ? "Connecting…" : `Enable autopay · ${plan.price}/month`}
       </button>
       <p className="form-note">
-        Razorpay&rsquo;s secure popup sets up the mandate and collects your payment details — UPI
-        Autopay, card or eMandate. The plan amount is then debited automatically every month; cancel
-        any time.
+        You&rsquo;ll be sent to Cashfree&rsquo;s secure checkout to set up the mandate — UPI
+        Autopay, card or eMandate — then brought straight back here. The plan amount is debited
+        automatically every month; cancel any time.
       </p>
     </div>
   );

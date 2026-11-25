@@ -5,15 +5,35 @@ import { useEffect, useRef, useState } from "react";
 import { signOutUser } from "@/app/actions";
 import AvatarImg from "./AvatarImg";
 
+type PlanSummary = {
+  name: string;
+  price: string;
+  term: string;
+  paid: boolean;
+  status?: string;
+};
+
 type AccountMenuProps = {
   name?: string;
   email?: string;
   image?: string;
   variant: "topbar" | "nav";
+  plan?: PlanSummary;
 };
 
-export default function AccountMenu({ name, email, image, variant }: AccountMenuProps) {
+const SUB_STATUS: Record<string, string> = {
+  ACTIVE: "Active",
+  INITIALIZED: "Starting",
+  PENDING: "Pending",
+  BANK_APPROVAL_PENDING: "Bank approval pending",
+  CANCELLED: "Cancelled",
+  COMPLETED: "Ended",
+  EXPIRED: "Expired",
+};
+
+export default function AccountMenu({ name, email, image, variant, plan }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -94,6 +114,49 @@ export default function AccountMenu({ name, email, image, variant }: AccountMenu
               >
                 Your profile
               </Link>
+              {plan && (
+                <div className="account-menu-sub">
+                  <button
+                    type="button"
+                    className="account-menu-item account-menu-sub-toggle"
+                    role="menuitem"
+                    aria-expanded={subOpen}
+                    onClick={() => setSubOpen((value) => !value)}
+                  >
+                    Subscription
+                    <em className={`account-menu-plan${plan.paid ? " paid" : ""}`}>
+                      {plan.name}
+                    </em>
+                  </button>
+                  {subOpen && (
+                    <div className="account-menu-sub-panel">
+                      <div>
+                        <span>Plan</span>
+                        <strong>{plan.name}</strong>
+                      </div>
+                      <div>
+                        <span>Billing</span>
+                        <strong>
+                          {plan.price} · {plan.term}
+                        </strong>
+                      </div>
+                      {plan.status && (
+                        <div>
+                          <span>Status</span>
+                          <strong>{SUB_STATUS[plan.status] ?? plan.status}</strong>
+                        </div>
+                      )}
+                      <Link
+                        href="/subscribe"
+                        className="account-menu-sub-manage"
+                        onClick={() => setOpen(false)}
+                      >
+                        Manage plan →
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
               <form action={signOutUser}>
                 <button type="submit" className="account-menu-item" role="menuitem">
                   Sign out

@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { setNewsletter, subscribeLetter } from "@/app/actions";
+import { setLetterTime, setNewsletter, subscribeLetter } from "@/app/actions";
 import NewsletterSampleModal from "./NewsletterSampleModal";
 import type { Newsletter } from "@/lib/newsletters";
 
-function LockIcon() {
+function LockIcon({ size = 10 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="5" y="11" width="14" height="9" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
     </svg>
@@ -23,16 +23,19 @@ export default function NewsletterCard({
   signedIn,
   premium,
   initialFormat,
+  initialTime,
 }: {
   letter: Newsletter;
   subscribed: boolean;
   signedIn: boolean;
   premium: boolean;
   initialFormat?: string;
+  initialTime?: string;
 }) {
   const [on, setOn] = useState(subscribed);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [time, setTime] = useState(initialTime ?? "");
   const [showPreview, setShowPreview] = useState(false);
   const [state, action, pending] = useActionState(subscribeLetter, null);
 
@@ -48,6 +51,21 @@ export default function NewsletterCard({
     setBusy(false);
   };
 
+  // Saves the reader's delivery-time override; an empty value clears it. The
+  // browser zone travels with it so delivery interprets the time locally.
+  const pickTime = async (value: string) => {
+    setTime(value);
+    setError("");
+    const result = await setLetterTime(
+      letter.id,
+      value,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+    if ("error" in result) {
+      setError(result.error);
+    }
+  };
+
   const guestDone = Boolean(state?.ok);
   // Premium editions can't be subscribed to on a free plan; readers already
   // subscribed keep the toggle so they can still unsubscribe.
@@ -55,36 +73,64 @@ export default function NewsletterCard({
 
   return (
     <article
-      className={`letter-card${letter.featured ? " featured" : ""}${on || guestDone ? " subscribed" : ""}`}
+      className={`letter-card${letter.featured ? " featured" : ""}${on || guestDone ? " subscribed" : ""}${locked && !on ? " locked" : ""}`}
     >
-      <div className="letter-top">
-        <span>{letter.tagline}</span>
-        <span>{letter.cadence}</span>
-      </div>
-      <h3 className="letter-name">{letter.name}</h3>
-      <p className="letter-topics">
-        {letter.topics.join(" · ")}
-        {letter.premium && (
-          <span className="letter-tag">
-            <LockIcon /> Premium
+      <div className="letter-body">
+        <div className="letter-top">
+          <span>{letter.tagline}</span>
+          <span className="letter-cadence">
+            {letter.cadence}
+            {time ? ` · ${time}` : ""}
           </span>
-        )}
-      </p>
-      <p className="letter-blurb">{letter.blurb}</p>
+        </div>
+        <h3 className="letter-name">{letter.name}</h3>
+        <p className="letter-topics">
+          {letter.topics.join(" · ")}
+          {letter.premium && (
+            <span className="letter-tag">
+              <LockIcon /> Premium
+            </span>
+          )}
+        </p>
+        <p className="letter-blurb">{letter.blurb}</p>
 
-      <button
-        type="button"
-        className="letter-sample-btn"
-        onClick={() => setShowPreview(true)}
-      >
-        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="3" width="7" height="9" rx="1" />
-          <rect x="14" y="3" width="7" height="5" rx="1" />
-          <rect x="14" y="12" width="7" height="9" rx="1" />
-          <rect x="3" y="16" width="7" height="5" rx="1" />
-        </svg>
-        Choose format
-      </button>
+        <button
+          type="button"
+          className="letter-sample-btn"
+          onClick={() => setShowPreview(true)}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="7" height="9" rx="1" />
+            <rect x="14" y="3" width="7" height="5" rx="1" />
+            <rect x="14" y="12" width="7" height="9" rx="1" />
+            <rect x="3" y="16" width="7" height="5" rx="1" />
+          </svg>
+          Choose format
+        </button>
+
+        {signedIn && on && (
+          <label className="letter-time">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 3" />
+            </svg>
+            Send at
+            <input
+              type="time"
+              value={time}
+              onChange={(event) => pickTime(event.target.value)}
+              aria-label={`Delivery time for ${letter.name}`}
+            />
+          </label>
+        )}
+
+        {locked && !on && (
+          <div className="letter-veil" aria-hidden="true">
+            <LockIcon size={24} />
+            <span>Members only</span>
+          </div>
+        )}
+      </div>
 
       {locked && !on ? (
         <div className="letter-foot">

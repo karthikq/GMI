@@ -10,15 +10,16 @@ import { NO_PHOTO } from "@/lib/avatar";
 import { COUNTRIES, INDIAN_STATES } from "@/lib/regions";
 import { isHostedImage, signUpload, uploadImage } from "@/lib/cloudinary";
 import { collections, connect } from "@/lib/db";
+import { deliverLetterNow } from "@/lib/delivery";
 import { sendNewsletterConfirmEmail, sendWelcomeEmail } from "@/lib/email";
 import { EMAIL_FORMATS, NEWSLETTERS } from "@/lib/newsletters";
 import { PLANS } from "@/lib/plans";
 import { INVITABLE_ROLES, isEditorial, type Role } from "@/lib/roles";
 import {
+  cashfreeMode,
   confirmSubscription,
-  createRazorpaySubscription,
-  razorpayKeyId,
-} from "@/lib/razorpay";
+  createCashfreeSubscription,
+} from "@/lib/cashfree";
 import { recordRead, recordView, toggleBookmark } from "@/lib/reading";
 import {
   deleteArticle,
@@ -27,6 +28,7 @@ import {
   searchArticles as searchArticleDocs,
   setNewsletterSubscription,
   setSubscriberFormat,
+  setSubscriberLetterTime,
   updateArticle,
 } from "@/lib/queries";
 import type { ArticleInput } from "@/lib/queries";
@@ -50,7 +52,7 @@ export async function subscribe(_previous: FormState, formData: FormData): Promi
     }
     if (result.added) {
       try {
-        await sendNewsletterConfirmEmail(email, "The Morning Briefing", "weekdays before 7am");
+        await sendNewsletterConfirmEmail(email, "briefing");
       } catch {}
     }
     return {
@@ -88,7 +90,7 @@ export async function subscribeLetter(_previous: FormState, formData: FormData):
     }
     if (result.added) {
       try {
-        await sendNewsletterConfirmEmail(email, found.name, found.cadence);
+        await sendNewsletterConfirmEmail(email, letter);
       } catch {}
     }
     return { ok: true, message: `You're subscribed to ${found.name}.` };
@@ -119,7 +121,7 @@ export async function setNewsletter(
     if (result.added) {
       if (found) {
         try {
-          await sendNewsletterConfirmEmail(user.email, found.name, found.cadence);
+          await sendNewsletterConfirmEmail(user.email, letter);
         } catch {}
       }
     }
@@ -148,6 +150,32 @@ export async function chooseEmailFormat(
   }
 }
 
+// Saves the reader's preferred delivery time for one newsletter. An empty
+// time clears the override so the letter's own cadence stands alone again.
+// `timeZone` is the reader's IANA zone, resolved by the browser.
+export async function setLetterTime(
+  letter: string,
+  time: string,
+  timeZone?: string,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Sign in to set a delivery time." };
+  if (!NEWSLETTERS.some((item) => item.id === letter)) {
+    return { error: "Unknown newsletter." };
+  }
+  const value = String(time ?? "").trim();
+  if (value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    return { error: "Pick a valid time." };
+  }
+  const zone = String(timeZone ?? "").trim();
+  try {
+    if (zone) new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return await setSubscriberLetterTime(user.email, letter, value || null, zone || undefined);
+  } catch {
+    return { error: "Couldn't save your time. Try again." };
+  }
+}
+
 // Saves the reader's chosen plan; signed-out readers go to sign in first.
 // Paid plans must go through Cashfree so nobody can grant themselves a paid
 // plan by posting this action directly.
@@ -167,23 +195,22 @@ export async function choosePlan(formData: FormData): Promise<void> {
   redirect("/subscribe");
 }
 
-// Starts a Razorpay autopay subscription for a paid plan and returns the
-// subscription id the browser hands to the Razorpay checkout popup.
+// Starts a Cashfree autopay subscription for a paid plan and returns the
+// checkout session id the browser hands to Cashfree's hosted mandate popup.
 export async function startSubscription(
   planId: string,
-): Promise<{ keyId: string; subscriptionId: string } | { error: string }> {
+): Promise<{ sessionId: string; subscriptionId: string; mode: string } | { error: string }> {
   const user = await getSessionUser();
   if (!user) return { error: "Sign in to choose a plan." };
   const plan = PLANS.find((p) => p.id === planId && p.amount > 0);
   if (!plan) return { error: "That plan can't be purchased online." };
   try {
-    const { subscriptionId } = await createRazorpaySubscription({
+    const { sessionId, subscriptionId } = await createCashfreeSubscription({
       userId: user.id,
       planId: plan.id,
+      customer: { name: user.name, email: user.email, phone: user.phone },
     });
-    const keyId = razorpayKeyId();
-    if (!keyId) return { error: "Payments aren't configured yet — Razorpay keys are missing." };
-    return { keyId, subscriptionId };
+    return { sessionId, subscriptionId, mode: cashfreeMode() };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Couldn't start the payment. Try again.",
@@ -191,7 +218,7 @@ export async function startSubscription(
   }
 }
 
-// Called from the Razorpay checkout handler once the mandate is authorised.
+// Called after the Cashfree checkout popup closes, to apply the mandate result.
 export async function confirmPlan(subscriptionId: string): Promise<{ status: string }> {
   const user = await getSessionUser();
   if (!user) return { status: "failed" };
@@ -397,6 +424,30 @@ export async function inviteEditorial(_previous: FormState, formData: FormData):
     ok: true,
     message: `${email} will get ${role} access next time they sign in or register.`,
   };
+}
+
+// Admin manual send from the subscriber dashboard — fires one issue email
+// for an address regardless of its cadence schedule. A "skipped" result means
+// Brevo isn't configured, so surface that instead of pretending it went out.
+export async function sendLetterNow(
+  email: string,
+  letter: string,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") return { error: "Only admins can send newsletters." };
+  try {
+    const result = await deliverLetterNow(String(email ?? ""), String(letter ?? ""));
+    if ("error" in result) return result;
+    if (result.status === "failed") {
+      return { error: "The mail provider rejected the send." };
+    }
+    if (result.status === "skipped") {
+      return { error: "Email is off — BREVO_API_KEY isn't configured." };
+    }
+    return { ok: true };
+  } catch {
+    return { error: "Couldn't send the newsletter. Try again." };
+  }
 }
 
 // Toggles a story in the signed-in reader's saved list. Guests get an error

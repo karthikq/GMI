@@ -4,6 +4,7 @@ import { getEdition, getMarkets, getSections, getTicker } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { profileImage } from "@/lib/avatar";
 import { marketSlug } from "@/lib/markets";
+import { PLANS } from "@/lib/plans";
 import { isEditorial } from "@/lib/roles";
 import AccountMenu from "./AccountMenu";
 import LiveWeather from "./LiveWeather";
@@ -69,12 +70,24 @@ async function AccountLink() {
 
 async function NavAccount() {
   const user = await getSessionUser();
+  const plan = PLANS.find((p) => p.id === user?.plan) ?? PLANS[0];
   return (
     <AccountMenu
       name={user?.name}
       email={user?.email}
       image={user ? profileImage(user) : undefined}
       variant="nav"
+      plan={
+        user
+          ? {
+              name: plan.name,
+              price: plan.price,
+              term: plan.term,
+              paid: plan.amount > 0,
+              status: user.subscription?.status,
+            }
+          : undefined
+      }
     />
   );
 }

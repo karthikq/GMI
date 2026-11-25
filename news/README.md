@@ -29,6 +29,23 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Newsletter delivery
+
+`GET /api/cron/deliver` runs one delivery tick: for every subscriber, each
+subscribed letter that is due (cadence covers their local weekday and their
+local time passed the send time — the reader's per-letter override, else the
+cadence's own time) gets the issue email via Brevo. `letterLastSent` on the
+subscriber doc makes ticks idempotent, so the cron can run often.
+
+- `vercel.json` schedules it every 15 minutes on Vercel. Self-hosted instead?
+  Point any scheduler at the same URL:
+  `curl -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/deliver`
+- `CRON_SECRET` — required bearer token in production; unset = open for local dev.
+- `DELIVERY_TZ` — fallback zone (default `Asia/Kolkata`) for subscribers who
+  never picked a time; picked times store the browser's own zone.
+- `BREVO_API_KEY` / `BREVO_SENDER_EMAIL` / `BREVO_SENDER_NAME` — transport.
+- `SITE_URL` — links inside the emails.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

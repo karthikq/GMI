@@ -881,3 +881,156 @@ export async function setSubscriberFormat(
   );
   return { ok: true };
 }
+
+// Delivery times the address picked per newsletter, keyed by letter id.
+export async function fetchSubscriberTimes(emailField: unknown): Promise<Record<string, string>> {
+  await connect();
+  await io();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!email) return {};
+  const doc = await collections.subscribers.findOne(
+    { email },
+    { projection: { letterTimes: 1 } },
+  );
+  const times = doc?.letterTimes;
+  if (!times || typeof times !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(times).filter(
+      ([id, time]) => NEWSLETTERS.some((item) => item.id === id) && typeof time === "string",
+    ),
+  );
+}
+
+// Stores (or clears, with null) one newsletter's delivery time, plus the IANA
+// zone that time is expressed in so the delivery cron can evaluate it locally.
+export async function setSubscriberLetterTime(
+  emailField: unknown,
+  letter: string,
+  time: string | null,
+  timeZone?: string,
+): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!VALID_EMAIL.test(email)) {
+    return { error: "Enter a valid email address." };
+  }
+  if (!NEWSLETTERS.some((item) => item.id === letter)) {
+    return { error: "Unknown newsletter." };
+  }
+  const sets: Record<string, string> = {};
+  if (time) sets[`letterTimes.${letter}`] = time;
+  if (timeZone) sets.timeZone = timeZone;
+  await collections.subscribers.updateOne(
+    { email },
+    {
+      ...(Object.keys(sets).length ? { $set: sets } : {}),
+      ...(!time ? { $unset: { [`letterTimes.${letter}`]: "" } } : {}),
+      $setOnInsert: { email, subscribedAt: new Date() },
+    },
+    { upsert: true },
+  );
+  return { ok: true };
+}
+
+// Logs one attempted newsletter email. Called by the email layer after each
+// send so the admin dashboard can show whether a reader actually got it.
+export async function recordDelivery(
+  emailField: unknown,
+  letter: string,
+  status: "sent" | "skipped" | "failed",
+  kind: "confirm" | "issue" = "confirm",
+): Promise<void> {
+  await connect();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!VALID_EMAIL.test(email)) return;
+  await collections.deliveries.insertOne({
+    email,
+    letter,
+    kind,
+    status,
+    sentAt: new Date(),
+  });
+}
+
+export type AdminLetterStatus = {
+  id: string;
+  name: string;
+  cadence: string;
+  time?: string;
+  // "pending" means no issue was ever recorded for this reader/letter pair;
+  // "confirmed" means the subscribe email went out but no issue has yet.
+  status: "sent" | "skipped" | "failed" | "confirmed" | "pending";
+  sentAt?: string;
+};
+
+export type AdminSubscriber = {
+  email: string;
+  name?: string;
+  subscribedAt?: string;
+  format?: string;
+  letters: AdminLetterStatus[];
+};
+
+// Every subscriber row for the admin dashboard, joined with the newest
+// delivery per letter and the reader's account name when one exists.
+export async function fetchSubscriberDashboard(): Promise<AdminSubscriber[]> {
+  await connect();
+  await io();
+  const [subs, deliveries] = await Promise.all([
+    collections.subscribers.find({}).sort({ subscribedAt: -1 }).toArray(),
+    collections.deliveries
+      .find({}, { projection: { email: 1, letter: 1, kind: 1, status: 1, sentAt: 1 } })
+      .sort({ sentAt: -1 })
+      .toArray(),
+  ]);
+  const users = await collections.users
+    .find({ email: { $in: subs.map((sub) => sub.email) } }, { projection: { email: 1, name: 1 } })
+    .toArray();
+  const names = new Map(users.map((user) => [user.email, user.name as string | undefined]));
+
+  // Deliveries arrive newest-first, so the first hit per pair+kind is the
+  // latest. Issue sends and confirmation sends are tracked separately — a
+  // letter only counts as "sent" once an actual issue went out.
+  const latest = new Map<string, { status: AdminLetterStatus["status"]; sentAt: Date }>();
+  for (const d of deliveries) {
+    const key = `${d.email} ${d.letter} ${d.kind}`;
+    if (!latest.has(key)) latest.set(key, { status: d.status, sentAt: d.sentAt });
+  }
+
+  const letterById = new Map(NEWSLETTERS.map((letter) => [letter.id, letter]));
+  return subs.map((sub) => ({
+    email: sub.email,
+    name: names.get(sub.email),
+    subscribedAt: sub.subscribedAt?.toISOString(),
+    format: EMAIL_FORMATS.find((item) => item.id === sub.format)?.name ?? sub.format,
+    letters: (Array.isArray(sub.letters) ? sub.letters : [])
+      .filter((id): id is string => typeof id === "string")
+      .map((id) => {
+        const letter = letterById.get(id);
+        const key = `${sub.email} ${id}`;
+        const issue = latest.get(`${key} issue`);
+        const markedDate = sub.letterLastSent?.[id];
+        // Issues sent before delivery logging was added only left a
+        // letterLastSent date — still counts as sent.
+        const status: AdminLetterStatus["status"] = issue
+          ? issue.status
+          : markedDate
+            ? "sent"
+            : latest.has(`${key} confirm`)
+              ? "confirmed"
+              : "pending";
+        return {
+          id,
+          name: letter?.name ?? id,
+          cadence: letter?.cadence ?? "",
+          ...(sub.letterTimes?.[id] ? { time: sub.letterTimes[id] } : {}),
+          status,
+          ...(issue
+            ? { sentAt: issue.sentAt.toISOString() }
+            : markedDate
+              ? { sentAt: markedDate }
+              : {}),
+        };
+      }),
+  }));
+}

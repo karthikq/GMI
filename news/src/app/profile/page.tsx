@@ -133,6 +133,11 @@ async function ProfileContent() {
               Analytics
             </Link>
           )}
+          {user?.role === "admin" && (
+            <Link href="/admin" className="button outline">
+              Subscribers
+            </Link>
+          )}
           {user && (
             <Link href="/profile/edit" className="button outline">
               Edit profile

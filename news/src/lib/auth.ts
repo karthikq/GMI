@@ -26,6 +26,9 @@ export type SessionUser = {
   role: Role;
   plan?: string;
   phone?: string;
+  // The latest Cashfree mandate started on this account, if any. Read by the
+  // subscribe page to re-check statuses that never reached a final state.
+  subscription?: { id?: string; cfId?: string; planId?: string; status?: string };
 };
 
 // The NextAuth JWT only carries our Mongo user id; profile fields, role and
@@ -60,6 +63,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       role: normalizeRole(user.role, user.plan),
       plan: user.plan,
       phone: user.phone,
+      subscription: user.subscription,
     };
   } catch {
     return null;

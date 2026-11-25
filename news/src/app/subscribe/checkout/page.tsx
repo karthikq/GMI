@@ -21,7 +21,7 @@ async function Checkout({ searchParams }: { searchParams: Promise<{ plan?: strin
         <p className="kicker">Membership</p>
         <h1>{planObj.name} — autopay setup</h1>
         <p>
-          {planObj.price} is charged automatically every month through Razorpay.{" "}
+          {planObj.price} is charged automatically every month through Cashfree.{" "}
           <Link href="/subscribe">Back to plans</Link>
         </p>
       </header>

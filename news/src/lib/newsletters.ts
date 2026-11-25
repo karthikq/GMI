@@ -125,6 +125,20 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
             "Over two million scanned broadsheets and field dispatches now freely searchable online.",
           image: "https://picsum.photos/seed/newspaper-press/600/380",
         },
+        {
+          tag: "WORLD",
+          title: "Monsoon Forecast Upgraded as Ocean Currents Shift",
+          summary:
+            "Meteorologists raise the seasonal rainfall outlook after early warming in the Indian Ocean.",
+          image: "https://picsum.photos/seed/monsoon-clouds/600/380",
+        },
+        {
+          tag: "TECHNOLOGY",
+          title: "Public Broadband Reaches Its 400th Rural District",
+          summary:
+            "The national fibre rollout crosses a milestone with village libraries first in line.",
+          image: "https://picsum.photos/seed/fiber-network/600/380",
+        },
       ],
       ctaText: "Read Today's Briefing →",
       footerTag: "ACCURATE / INDEPENDENT / ESSENTIAL",
@@ -132,6 +146,7 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
   },
   {
     id: "pulse",
+    premium: true,
     name: "AI Weekly Pulse",
     tagline: "A smarter tomorrow",
     cadence: "Every Friday",
@@ -174,6 +189,20 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
             "SB 813 and AB 1405 establish the first-in-the-nation AI auditor framework.",
           image: "https://picsum.photos/seed/capitol-policy/600/380",
         },
+        {
+          tag: "RESEARCH",
+          title: "Small Language Models Match Last Year's Giants",
+          summary:
+            "Distilled eight-billion-parameter systems now run frontier reasoning tasks on laptops.",
+          image: "https://picsum.photos/seed/laptop-model/600/380",
+        },
+        {
+          tag: "BUSINESS",
+          title: "Chip Designers Open RISC-V Lab in Bengaluru",
+          summary:
+            "A joint industry-university lab will train five hundred engineers on open silicon.",
+          image: "https://picsum.photos/seed/riscv-lab/600/380",
+        },
       ],
       ctaText: "Read This Week's Issue →",
       footerTag: "INFORM / INSPIRE / EMPOWER",
@@ -181,6 +210,7 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
   },
   {
     id: "markets",
+    premium: true,
     name: "Markets Close",
     tagline: "The day in numbers",
     cadence: "Weekdays at 6pm",
@@ -223,6 +253,20 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
             "Institutional inflows accelerate after unexpected moderation in quarterly wholesale prices.",
           image: "https://picsum.photos/seed/financial-district/600/380",
         },
+        {
+          tag: "CURRENCIES",
+          title: "Rupee Firms to Three-Month High on Remittance Inflows",
+          summary:
+            "Record quarterly transfers and softer dollar yields lift the currency.",
+          image: "https://picsum.photos/seed/currency-notes/600/380",
+        },
+        {
+          tag: "COMMODITIES",
+          title: "Gold Extends Rally as Central Banks Add Reserves",
+          summary:
+            "Sovereign buying outpaces mine supply for a fifth straight quarter.",
+          image: "https://picsum.photos/seed/gold-bars/600/380",
+        },
       ],
       ctaText: "View Full Market Sheet →",
       footerTag: "ANALYSIS / DISCIPLINE / PERSPECTIVE",
@@ -230,6 +274,7 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
   },
   {
     id: "world",
+    premium: true,
     name: "The World Weekly",
     tagline: "Forty countries, one email",
     cadence: "Every Sunday",
@@ -272,6 +317,20 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
             "Cross-border consortia ink funding agreement for industrial heating conversions.",
           image: "https://picsum.photos/seed/offshore-wind/600/380",
         },
+        {
+          tag: "DIPLOMACY",
+          title: "Pacific Island States Sign Joint Climate Fund",
+          summary:
+            "Twelve nations pool adaptation resources ahead of the monsoon season.",
+          image: "https://picsum.photos/seed/pacific-islands/600/380",
+        },
+        {
+          tag: "ECONOMY",
+          title: "Suez Transit Rebounds to Pre-Crisis Levels",
+          summary:
+            "Carrier schedules normalise as insurers restore coverage on the corridor.",
+          image: "https://picsum.photos/seed/suez-canal/600/380",
+        },
       ],
       ctaText: "Read The World Dispatch →",
       footerTag: "PERSPECTIVE / DEPTH / BALANCE",
@@ -279,6 +338,7 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
   },
   {
     id: "weekend",
+    premium: true,
     name: "Weekend Longform",
     tagline: "Stories that take their time",
     cadence: "Every Saturday",
@@ -321,6 +381,20 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
             "Intimate portraits of families working seasonal brine lakes before winter passes close.",
           image: "https://picsum.photos/seed/himalayan-salt-lakes/600/380",
         },
+        {
+          tag: "PROFILE",
+          title: "The Clockmakers Keeping a 200-Year-Old Bazaar on Time",
+          summary:
+            "Three generations maintain the tower clocks of the old quarter entirely by hand.",
+          image: "https://picsum.photos/seed/clockmaker/600/380",
+        },
+        {
+          tag: "ESSAY",
+          title: "In Praise of the Early Train",
+          summary:
+            "A writer rediscovers the country at dawn through its slowest services.",
+          image: "https://picsum.photos/seed/dawn-train/600/380",
+        },
       ],
       ctaText: "Read All Longform Stories →",
       footerTag: "PATIENCE / RIGOUR / CRAFT",
@@ -328,6 +402,7 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
   },
   {
     id: "india",
+    premium: true,
     name: "India This Week",
     tagline: "From every corner",
     cadence: "Every Saturday",
@@ -369,6 +444,20 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
           summary:
             "Traditional dryland grain varieties gain traction across African and Mediterranean farms.",
           image: "https://picsum.photos/seed/agriculture-field/600/380",
+        },
+        {
+          tag: "AGRICULTURE",
+          title: "Wheat Procurement Opens Early in Northern States",
+          summary:
+            "A revised support-price window sees mandis start registrations a fortnight ahead.",
+          image: "https://picsum.photos/seed/wheat-field/600/380",
+        },
+        {
+          tag: "POLITICS",
+          title: "State Assemblies Pass Landmark Water-Sharing Bill",
+          summary:
+            "Three states ratify a river-basin compact ending a decade of disputes.",
+          image: "https://picsum.photos/seed/assembly-hall/600/380",
         },
       ],
       ctaText: "Read National Roundup →",
@@ -442,6 +531,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "POLICY", title: "Voting Reform Bill Clears Committee Stage", summary: "Bipartisan panel advances ballot-access changes to the floor for a winter vote." },
       { tag: "ANALYSIS", title: "The New Geography of Swing States", summary: "Three fast-growing districts now decide more elections than entire regions once did." },
       { tag: "GOVERNANCE", title: "Federal Grants Rethink Urban Housing Rules", summary: "Cities accepting transit funds must relax density caps near new metro corridors." },
+      { tag: "ELECTIONS", title: "Local Polls See Record First-Time Voter Turnout", summary: "Under-25 registration jumps forty percent as civic races heat up." },
+      { tag: "POLICY", title: "Housing Ministry Proposes Rent Relief Index", summary: "A quarterly benchmark would tie support payments to metro rent trends." },
     ],
   }),
   deskNewsletter({
@@ -458,6 +549,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "COMPANIES", title: "Legacy Textile Giant Pivots to Technical Fabrics", summary: "Century-old mills retool for defence and medical supply contracts." },
       { tag: "STARTUPS", title: "Fintech Funding Rebounds After a Quiet Year", summary: "Late-stage cheques return as payment firms post their first profitable quarters." },
       { tag: "TRADE", title: "New Corridors Cut Export Times by a Third", summary: "Dedicated freight routes move apparel and pharma cargo to ports in under a day." },
+      { tag: "COMPANIES", title: "Tea Chain Brews Expansion Into Gulf Markets", summary: "The homegrown brand opens forty outlets across three GCC states." },
+      { tag: "EARNINGS", title: "IT Majors Post Steady Quarter on AI Contracts", summary: "Automation deals now drive a third of new enterprise bookings." },
     ],
   }),
   deskNewsletter({
@@ -474,6 +567,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "RESEARCH", title: "Fusion Test Reactor Holds Plasma for 94 Seconds", summary: "A national tokamak doubles its previous confinement record in overnight trials." },
       { tag: "SPACE", title: "Lunar South Pole Ice Confirmed by Twin Probes", summary: "Orbital radar and a surface drill agree on accessible water deposits in shadowed craters." },
       { tag: "MEDICINE", title: "CRISPR Therapy Clears First Phase-3 Trial", summary: "A single-infusion treatment for a rare blood disorder moves toward approval." },
+      { tag: "CLIMATE", title: "Glacier Lakes in the Himalaya Grow Eight Percent", summary: "Satellite mapping flags thirty new high-risk basins for early-warning systems." },
+      { tag: "RESEARCH", title: "Lab-Grown Cornea Restores Sight in First Trial", summary: "A decade of stem-cell work moves toward larger clinical studies." },
     ],
   }),
   deskNewsletter({
@@ -490,6 +585,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "CRICKET", title: "Domestic League Expands to Twelve Franchises", summary: "Two new city teams join next season as broadcast rights hit a record." },
       { tag: "FOOTBALL", title: "National Women's Side Qualifies for Continental Cup", summary: "An unbeaten qualifying run books a first-ever spot in the regional finals." },
       { tag: "ATHLETICS", title: "Junior Sprinter Breaks National 200m Record", summary: "A 19-year-old clocks the fastest wind-legal time in the country's history." },
+      { tag: "ATHLETICS", title: "Marathon Season Breaks Participation Records", summary: "City races logged two million finishers across the winter calendar." },
+      { tag: "FOOTBALL", title: "Homegrown Striker Signs for European Club", summary: "The 20-year-old becomes the league's fourth export this season." },
     ],
   }),
   deskNewsletter({
@@ -506,6 +603,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "CINEMA", title: "Studio Slate Adds Three Regional-Language Epics", summary: "Big-budget period films greenlit across four industries for next year." },
       { tag: "STREAMING", title: "Docuseries Boom Draws Record Audiences", summary: "True-story formats now account for a third of all weekend viewing hours." },
       { tag: "MUSIC", title: "Classical Fusion Tour Sells Out Twelve Cities", summary: "Orchestral collaborations with folk artists find a new young audience." },
+      { tag: "CINEMA", title: "Auteur Double Bill Draws Revival Crowds", summary: "Restored classics run to packed weekend matinees in twelve cities." },
+      { tag: "MUSIC", title: "Streaming Services Add Regional Language Charts", summary: "Dedicated rankings arrive for eight more languages as listenership triples." },
     ],
   }),
   deskNewsletter({
@@ -522,6 +621,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "BOOKS", title: "Translated Poetry Tops the Year's Prize Lists", summary: "Collections in four languages share the major literary honours this season." },
       { tag: "ART", title: "Biennale Turns a Dockyard into a Gallery", summary: "Forty artists take over disused shipyards for the largest edition yet." },
       { tag: "THEATRE", title: "Street Theatre Festival Draws a Million Visitors", summary: "Open-air productions return to the old quarter for ten straight nights." },
+      { tag: "LITERATURE", title: "Debut Novel Sweeps the Season's Prize Lists", summary: "A schoolteacher's first book lands translation rights in nine languages." },
+      { tag: "ART", title: "Museum Extends Modern Masters Retrospective", summary: "Weekend queues push the gallery to its longest-ever run." },
     ],
   }),
   deskNewsletter({
@@ -538,6 +639,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "FOOD", title: "Regional Breakfasts Get a Modern Reinvention", summary: "Heritage dishes return to cafe menus with nutritionist-approved twists." },
       { tag: "DESIGN", title: "Compact Homes Inspire a New Furniture Wave", summary: "Modular, foldable pieces outsell conventional sets for the first time." },
       { tag: "WELLNESS", title: "Weekend Farmers' Markets Double in a Year", summary: "Neighbourhood markets now anchor Saturday routines in forty cities." },
+      { tag: "FOOD", title: "Heirloom Rice Varieties Return to Urban Kitchens", summary: "Small-grain farms find direct buyers through city co-ops." },
+      { tag: "LIVING", title: "Daylight Hours Drive a Commute-Walking Trend", summary: "Longer evenings see office workers swap the last metro stop for a stroll." },
     ],
   }),
   deskNewsletter({
@@ -554,6 +657,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "MEDICINE", title: "AI-Assisted Radiology Clears Hospital Trials", summary: "Flagged scans reach specialists forty percent faster in pilot districts." },
       { tag: "WELLNESS", title: "Sleep Clinics Report a Surge in Young Patients", summary: "Under-30s now make up a third of new referrals, doctors say." },
       { tag: "NUTRITION", title: "Protein-Fortified Millets Enter School Meals", summary: "Climate-hardy grains join midday menus in eight more states." },
+      { tag: "NUTRITION", title: "Iron-Fortified Atta Shows Marked Gains in Trials", summary: "Anaemia rates drop in districts piloting the enriched staple." },
+      { tag: "MENTAL HEALTH", title: "Workplace Counselling Mandate Covers More Firms", summary: "The wellbeing rule extends to employers with fifty-plus staff." },
     ],
   }),
   deskNewsletter({
@@ -570,6 +675,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "SCHOOLS", title: "District Libraries Reopen on Sundays", summary: "Weekend hours return to two hundred reading rooms after a decade." },
       { tag: "UNIVERSITIES", title: "Dual-Degree Apprenticeships Gain Traction", summary: "Factory semesters now count toward graduation at two hundred institutions." },
       { tag: "SKILLS", title: "Micro-Credential Programmes See Record Sign-Ups", summary: "Short certification courses draw mid-career learners in data and logistics." },
+      { tag: "SCHOOLS", title: "AI Tutors Join Classroom Pilots in Five States", summary: "Adaptive practice tools arrive first in government middle schools." },
+      { tag: "CAREERS", title: "Green Jobs Fair Draws Forty Thousand Applicants", summary: "Solar and grid-maintenance roles top the openings list." },
     ],
   }),
   deskNewsletter({
@@ -586,6 +693,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "CLIMATE", title: "Coral Nurseries Record First Natural Spawning", summary: "Restored reefs reach a milestone marine biologists feared was decades away." },
       { tag: "CONSERVATION", title: "Community Forests Gain Legal Protection", summary: "A new framework recognises village stewardship over shared woodland." },
       { tag: "ENERGY", title: "Desert Solar Park Hits Full Capacity Early", summary: "The country's largest array comes online six months ahead of schedule." },
+      { tag: "WILDLIFE", title: "Flamingo Count at City Wetland Hits a Decade High", summary: "Better monsoon inflows draw the biggest flock since 2016." },
+      { tag: "ENERGY", title: "Rooftop Solar Crosses Ten-Gigawatt Milestone", summary: "Household installs double as net-metering approvals speed up." },
     ],
   }),
   deskNewsletter({
@@ -602,6 +711,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "DESTINATIONS", title: "Hidden Valleys Open to Small-Group Treks", summary: "New permit rules cap visitors while opening trails long off-limits." },
       { tag: "RAIL", title: "Scenic Line Adds Panorama Coaches", summary: "Glass-roofed carriages join the coastal route from next month." },
       { tag: "FOOD", title: "A Coastal Trail of a Hundred Eateries", summary: "A mapped weekend route links harbour shacks to heritage kitchens." },
+      { tag: "DESTINATIONS", title: "Eco-Cabins Open Along the Western Ghats Trail", summary: "Twenty solar-powered huts connect a new five-day trekking route." },
+      { tag: "RAIL", title: "Heritage Line Restores Its 1950s Dining Car", summary: "The mountain route brings back plated service after thirty years." },
     ],
   }),
   deskNewsletter({
@@ -618,6 +729,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "EV", title: "Compact EV Crosses the 500 km Range Mark", summary: "Real-world testing puts the new hatchback ahead of every rival in class." },
       { tag: "INDUSTRY", title: "Component Hubs Expand Beyond the Metros", summary: "Tier-2 clusters win the next wave of drivetrain and battery assembly." },
       { tag: "MOTORSPORT", title: "Hill-Climb Championship Returns After a Decade", summary: "The revived series will run five rounds on classic mountain stages." },
+      { tag: "TWO-WHEELERS", title: "Electric Scooters Overtake Petrol Sales in Metros", summary: "Charging coverage crosses a tipping point in four cities." },
+      { tag: "INDUSTRY", title: "Safety Ratings Now Mandatory for All New Models", summary: "Crash-test disclosure joins the showroom price sheet." },
     ],
   }),
   deskNewsletter({
@@ -634,6 +747,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "PC", title: "City Studios Win Big at International Showcase", summary: "Three homegrown teams take awards at the year's largest indie festival." },
       { tag: "CONSOLE", title: "Next-Gen Handhelds Push Cloud Play Forward", summary: "Hybrid devices blur the line between portable and docked gaming." },
       { tag: "ESPORTS", title: "University League Draws Record Viewership", summary: "The inter-campus final peaks past previous professional tournament numbers." },
+      { tag: "MOBILE", title: "Puzzle Title Crosses Fifty Million Downloads", summary: "A two-person studio's word game sweeps the app charts." },
+      { tag: "ESPORTS", title: "Domestic LAN Circuit Adds a Women's Division", summary: "Eight franchised teams join the spring calendar." },
     ],
   }),
   deskNewsletter({
@@ -650,6 +765,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "COLUMN", title: "The Case for Slower Cities", summary: "Why the next urban dividend comes from streets built for lingering." },
       { tag: "EDITORIAL", title: "Data Privacy Needs a Federal Frame", summary: "Patchwork state rules leave citizens — and companies — guessing." },
       { tag: "DEBATE", title: "Two Economists Argue the Growth Number", summary: "What the headline figure hides, depending on which model you trust." },
+      { tag: "COLUMN", title: "The Real Price of Free Delivery", summary: "What the gig-economy convenience costs the city that pays for it." },
+      { tag: "EDITORIAL", title: "Night Classes Deserve a Second Look", summary: "Working students need timetables that meet them after dark." },
     ],
   }),
   deskNewsletter({
@@ -666,6 +783,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "GALLERY", title: "Festival of Lights Across Twelve States", summary: "One celebration, a dozen traditions — seen from street level." },
       { tag: "FIELD NOTES", title: "Shepherds on the High Himalayan Passes", summary: "A seasonal migration photographed over three winters." },
       { tag: "ARCHIVE", title: "The City in 1975: Newly Scanned Frames", summary: "Rediscovered negatives show a skyline before the towers." },
+      { tag: "PHOTO ESSAY", title: "Night Markets of the Old Quarter", summary: "Lantern-lit stalls and the vendors who keep the lanes alive till three." },
+      { tag: "GALLERY", title: "First Snow on the Orchard Belt", summary: "Apple country turns white a fortnight earlier than usual." },
     ],
   }),
   deskNewsletter({
@@ -682,6 +801,8 @@ const DESK_NEWSLETTERS: Newsletter[] = [
       { tag: "GROWTH", title: "Manufacturing Output Beats Forecasts Again", summary: "Factory activity expands for a seventh straight month on export orders." },
       { tag: "JOBS", title: "Rural Wages Rise for a Sixth Straight Month", summary: "Non-farm work now drives most of the income gains in the countryside." },
       { tag: "PRICES", title: "Retail Inflation Eases to a Two-Year Low", summary: "Cooling food costs pull the headline rate inside the comfort band." },
+      { tag: "TRADE", title: "Export Orders Rise for a Sixth Straight Month", summary: "Small manufacturers lead the rebound in engineering goods." },
+      { tag: "POLICY", title: "Rural Credit Guarantee Doubles for Small Loans", summary: "The scheme widens cover for first-time borrowers." },
     ],
   }),
 ];

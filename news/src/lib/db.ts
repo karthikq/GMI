@@ -16,6 +16,22 @@ export type SubscriberDoc = {
   subscribedAt: Date;
   letters: string[];
   format?: string;
+  // Per-letter delivery time overrides the reader picked, keyed by letter id.
+  letterTimes?: Record<string, string>;
+  // Last local date (YYYY-MM-DD) each letter was delivered — dedupes the cron run.
+  letterLastSent?: Record<string, string>;
+  // IANA zone the reader's letterTimes are expressed in (captured at pick time).
+  timeZone?: string;
+};
+
+// One row per newsletter email the app attempted, written after every send so
+// the admin dashboard can tell "sent" from "never went out" per reader.
+export type DeliveryDoc = {
+  email: string;
+  letter: string;
+  kind: "confirm" | "issue";
+  status: "sent" | "skipped" | "failed";
+  sentAt: Date;
 };
 
 export const collections = {
@@ -23,6 +39,7 @@ export const collections = {
   articles: db.collection("articles"),
   markets: db.collection("markets"),
   subscribers: db.collection<SubscriberDoc>("subscribers"),
+  deliveries: db.collection<DeliveryDoc>("deliveries"),
   users: db.collection("users"),
   sessions: db.collection("sessions"),
   bookmarks: db.collection("bookmarks"),
@@ -65,7 +82,7 @@ export async function connect(): Promise<void> {
   await io();
   ready ??= (async () => {
     await client.connect();
-    const { sections: sectionCollection, articles, subscribers, users, sessions, bookmarks, reads, invites } = collections;
+    const { sections: sectionCollection, articles, subscribers, deliveries, users, sessions, bookmarks, reads, invites } = collections;
     await Promise.all([
       sectionCollection.createIndex({ slug: 1 }, { unique: true }),
       articles.createIndex({ slug: 1 }, { unique: true }),
@@ -73,6 +90,8 @@ export async function connect(): Promise<void> {
       articles.createIndex({ publishedAt: -1 }),
       articles.createIndex({ reads: -1 }),
       subscribers.createIndex({ email: 1 }, { unique: true }),
+      // The dashboard reads the newest delivery per reader/letter pair.
+      deliveries.createIndex({ email: 1, letter: 1, sentAt: -1 }),
       users.createIndex({ email: 1 }, { unique: true }),
       // Case-insensitive; Google-only accounts have no username.
       users.createIndex(

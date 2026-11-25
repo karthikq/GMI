@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { chooseEmailFormat } from "@/app/actions";
 import EmailSheet from "./EmailSheets";
@@ -41,7 +41,7 @@ function LockedPanel({ format }: { format: EmailFormat }) {
 
 // Lets the reader preview each newsletter in the available email formats.
 // The default (first) format is free for everyone; the rest unlock with a
-// paid plan, and a signed-in reader's pick is saved on selection.
+// paid plan. Tabs only preview — the Save button persists the pick.
 export default function NewsletterSampleModal({
   letter,
   onClose,
@@ -56,14 +56,42 @@ export default function NewsletterSampleModal({
   initialFormat?: string;
 }) {
   const [format, setFormat] = useState(initialFormat ?? EMAIL_FORMATS[0].id);
+  const [saved, setSaved] = useState(initialFormat ?? EMAIL_FORMATS[0].id);
+  const [note, setNote] = useState<{ kind: "ok" | "error"; text: React.ReactNode } | null>(null);
+  const [pending, startTransition] = useTransition();
   const active = EMAIL_FORMATS.find((item) => item.id === format) ?? EMAIL_FORMATS[0];
   const allowed = !active.premium || premium;
 
   const select = (item: EmailFormat) => {
     setFormat(item.id);
-    if (signedIn && (!item.premium || premium)) {
-      void chooseEmailFormat(item.id);
+    setNote(null);
+  };
+
+  const save = () => {
+    if (!signedIn) {
+      setNote({
+        kind: "error",
+        text: (
+          <>
+            Sign in to save your format. <Link href="/signin">Sign in</Link>
+          </>
+        ),
+      });
+      return;
     }
+    setNote(null);
+    startTransition(async () => {
+      const result = await chooseEmailFormat(active.id);
+      if ("error" in result) {
+        setNote({ kind: "error", text: result.error });
+        return;
+      }
+      setSaved(active.id);
+      setNote({
+        kind: "ok",
+        text: `Saved — your ${letter.name} emails will use ${active.name}.`,
+      });
+    });
   };
 
   // Portalled to <body> so the card it opens from can't trap the fixed
@@ -78,30 +106,41 @@ export default function NewsletterSampleModal({
         </div>
 
         <div className="fmt-body">
-          <div className="fmt-tabs" role="tablist" aria-label="Email format">
-            {EMAIL_FORMATS.map((item) => (
+          <div className="fmt-side">
+            <div className="fmt-tabs" role="tablist" aria-label="Email format">
+              {EMAIL_FORMATS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={format === item.id}
+                  className="fmt-tab"
+                  onClick={() => select(item)}
+                >
+                  {item.premium && <LockIcon />}
+                  {item.name}
+                  {item.premium && <span className="fmt-tab-tag">Paid</span>}
+                </button>
+              ))}
+            </div>
+            <div className="fmt-save">
+              {note && (
+                <p className={`form-note ${note.kind}`} role="status">
+                  {note.text}
+                </p>
+              )}
               <button
-                key={item.id}
                 type="button"
-                role="tab"
-                aria-selected={format === item.id}
-                className="fmt-tab"
-                onClick={() => select(item)}
+                className="button"
+                onClick={save}
+                disabled={pending || !allowed || (signedIn && saved === format)}
               >
-                {item.premium && <LockIcon />}
-                {item.name}
-                {item.premium && <span className="fmt-tab-tag">Paid</span>}
+                {pending ? "Saving…" : signedIn && saved === format ? "Saved ✓" : "Save format"}
               </button>
-            ))}
+            </div>
           </div>
 
           <div className="fmt-preview">
-            {signedIn && allowed && active.premium && (
-              <p className="fmt-saved">
-                Format saved — your {letter.name} emails will use {active.name}.
-              </p>
-            )}
-
             {allowed ? <EmailSheet format={active.id} letter={letter} /> : <LockedPanel format={active} />}
           </div>
         </div>
