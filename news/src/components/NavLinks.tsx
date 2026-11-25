@@ -66,30 +66,30 @@ export default function NavLinks({ sections }: { sections: Section[] }) {
         {visible.map((section) => (
           <li key={section.slug}>{sectionLink(section)}</li>
         ))}
-        {overflow.length > 0 && (
-          <li>
-            <button
-              type="button"
-              className="nav-more"
-              aria-haspopup="menu"
-              aria-expanded={open}
-              onClick={() => setOpen((value) => !value)}
-            >
-              More
-              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                <path
-                  d="m6 9 6 6 6-6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </li>
-        )}
       </ul>
+      {/* Pinned outside the scrolling list so a crowded nav (e.g. the
+          Subscribe button for free readers) can't push it out of view. */}
+      {overflow.length > 0 && (
+        <button
+          type="button"
+          className="nav-more"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          More
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+            <path
+              d="m6 9 6 6 6-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
       {open && overflow.length > 0 && (
         <div className="nav-more-panel" role="menu">
           {overflow.map((section) => sectionLink(section, () => setOpen(false)))}
