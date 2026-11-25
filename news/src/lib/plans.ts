@@ -4,6 +4,8 @@ export type Plan = {
   id: PlanId;
   name: string;
   price: string;
+  // Monthly charge in INR; 0 for free plans. Used as plan_amount with Cashfree.
+  amount: number;
   term: string;
   cta: string;
   recommended?: boolean;
@@ -15,6 +17,7 @@ export const PLANS: Plan[] = [
     id: "free",
     name: "Free",
     price: "₹0",
+    amount: 0,
     term: "Forever",
     cta: "Start free",
     features: [
@@ -29,6 +32,7 @@ export const PLANS: Plan[] = [
     id: "premium",
     name: "Premium",
     price: "₹99",
+    amount: 99,
     term: "Per month",
     cta: "Choose Premium",
     recommended: true,
@@ -44,6 +48,7 @@ export const PLANS: Plan[] = [
     id: "premium-plus",
     name: "Premium Plus",
     price: "₹199",
+    amount: 199,
     term: "Per month",
     cta: "Choose Premium Plus",
     features: [

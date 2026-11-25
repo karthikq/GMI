@@ -49,6 +49,13 @@ export async function recordRead(
   );
 }
 
+// Every article open counts a view, including anonymous visitors. The counter
+// lives on the article so list views and the author dashboard can read it.
+export async function recordView(slug: string): Promise<void> {
+  await connect();
+  await collections.articles.updateOne({ slug }, { $inc: { views: 1 } });
+}
+
 export async function getSavedSlugs(userId: ObjectId, limit = 12): Promise<string[]> {
   await connect();
   const docs = await collections.bookmarks

@@ -7,14 +7,26 @@ import { PLANS } from "@/lib/plans";
 
 export const metadata: Metadata = { title: "Subscribe" };
 
-async function Plans() {
-  const user = await getSessionUser();
+const STATUS_MESSAGES: Record<string, { kind: "ok" | "error"; text: string }> = {
+  success: { kind: "ok", text: "You're subscribed — your plan is now active." },
+  pending: {
+    kind: "ok",
+    text: "Your mandate is awaiting bank approval. Your plan activates automatically once it clears.",
+  },
+  failed: { kind: "error", text: "The payment didn't complete. Nothing was charged — try again." },
+  cancelled: { kind: "error", text: "That subscription ended, so your plan was moved back to Free." },
+};
+
+async function Plans({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const [{ status }, user] = await Promise.all([searchParams, getSessionUser()]);
+  const notice = status ? STATUS_MESSAGES[status] : undefined;
   return (
     <>
       <header className="page-head">
         <p className="kicker">Membership</p>
         <h1>Recommended subscription plans</h1>
         <p>Pick the plan that fits how you read. Change or cancel any time.</p>
+        {notice && <p className={`form-note ${notice.kind}`}>{notice.text}</p>}
       </header>
       <div className="plans">
         {PLANS.map((plan) => {
@@ -49,10 +61,14 @@ async function Plans() {
   );
 }
 
-export default function SubscribePage() {
+export default function SubscribePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   return (
     <Suspense fallback={<PageSkeleton />}>
-      <Plans />
+      <Plans searchParams={searchParams} />
     </Suspense>
   );
 }

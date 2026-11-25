@@ -142,7 +142,7 @@ export const getMarketViews = () => get(fetchMarketViews);
 export const getMarketDetail = (slug: string, range: MarketRange) => get(() => fetchMarketDetail(slug, range));
 export const getHome = () => get(fetchHome);
 
-export const getArticle = (slug: string) => get(() => fetchArticle(slug));
+export const getArticle = (slug: string, viewerId?: string) => get(() => fetchArticle(slug, viewerId));
 export const getEditableArticle = (slug: string, userId: string) => get(() => fetchEditableArticle(slug, userId));
 
 export function getArticles(params: {

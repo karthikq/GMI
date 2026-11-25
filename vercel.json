@@ -23,6 +23,12 @@
       }
     },
     {
+      "source": "/api/webhooks/(.*)",
+      "destination": {
+        "service": "news"
+      }
+    },
+    {
       "source": "/api/(.*)",
       "destination": {
         "service": "server"

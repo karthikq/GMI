@@ -75,6 +75,7 @@ export type Newsletter = {
   blurb: string;
   topics: string[];
   featured?: boolean;
+  premium?: boolean;
   sample: SampleEmail;
 };
 
@@ -377,9 +378,10 @@ const FLAGSHIP_NEWSLETTERS: Newsletter[] = [
 ];
 
 /* --- Desk editions -------------------------------------------------------
-   One newsletter per newsroom desk. Desks already covered by a flagship
-   edition (world, markets, technology→pulse, longform→weekend, india) are
-   skipped so readers never see two newsletters for the same desk. */
+   One newsletter per newsroom desk, gated behind the paid plans. Desks
+   already covered by a flagship edition (world, markets, technology→pulse,
+   longform→weekend, india) are skipped so readers never see two newsletters
+   for the same desk. */
 
 type DeskStory = { tag: string; title: string; summary: string };
 
@@ -401,6 +403,7 @@ function deskNewsletter(cfg: {
     cadence: cfg.cadence,
     blurb: cfg.blurb,
     topics: cfg.topics,
+    premium: true,
     sample: {
       volNumber: "VOL. 1 · WEEKLY",
       date: cfg.cadence.toUpperCase(),

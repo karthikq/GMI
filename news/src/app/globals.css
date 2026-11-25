@@ -1475,6 +1475,45 @@ html.theme-animating *::after {
   font-size: 13px;
 }
 
+.checkout-card {
+  max-width: 560px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.checkout-summary {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.checkout-summary div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.checkout-summary dt {
+  font: 10px var(--font-mono), monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.checkout-summary dd {
+  text-align: right;
+  font-weight: 600;
+}
+
+.checkout-card .button {
+  width: 100%;
+  margin-top: 16px;
+}
+
 @media (max-width: 900px) {
   .plans {
     grid-template-columns: 1fr;
@@ -1731,7 +1770,8 @@ a.tag.solid:hover {
   margin-bottom: 22px;
 } */
 
-.story-body > p:first-of-type::first-letter {
+.story-body > p:first-of-type::first-letter,
+.story-body > div:first-of-type > p:first-of-type::first-letter {
   float: left;
   padding: 6px 10px 0 0;
   font-family: var(--font-display), Georgia, serif;
@@ -2034,6 +2074,7 @@ a.tag.solid:hover {
   height: 200px;
   padding-top: 8px;
   border-bottom: 1px solid var(--line);
+  overflow-x: auto;
 }
 
 .dash-bar {
@@ -2043,7 +2084,7 @@ a.tag.solid:hover {
   align-items: center;
   justify-content: flex-end;
   height: 100%;
-  min-width: 0;
+  min-width: 36px;
 }
 
 .dash-bar i {
@@ -2082,6 +2123,22 @@ a.tag.solid:hover {
   background: var(--accent);
 }
 
+@media (max-width: 640px) {
+  .dash-bars {
+    height: 140px;
+    gap: 5px;
+  }
+
+  .dash-bar {
+    min-width: 30px;
+  }
+
+  .dash-bar small {
+    font-size: 9px;
+    letter-spacing: -0.02em;
+  }
+}
+
 .toast {
   position: fixed;
   left: 50%;
@@ -2104,6 +2161,33 @@ a.tag.solid:hover {
   align-items: center;
   gap: 12px;
   margin-top: 20px;
+}
+
+.owner-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.owner-stats div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.owner-stats dt {
+  font: 10px var(--font-mono), monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.owner-stats dd {
+  font: 700 22px/1 var(--font-display), Georgia, serif;
 }
 
 .button.danger {
@@ -2895,6 +2979,23 @@ a.tag.solid:hover {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--accent);
+}
+
+/* Small "Premium" pill — marks paid editions on cards and profile prefs. */
+.letter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font: 700 9px var(--font-mono), monospace;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  vertical-align: middle;
 }
 
 .letter-blurb {
@@ -6109,6 +6210,18 @@ div[data-youtube-video][data-align="right"] {
   color: var(--ink);
 }
 
+.pref-upgrade {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.pref-upgrade:hover {
+  color: var(--accent-dark);
+}
+
 .profile-account {
   display: grid;
   gap: 12px;
@@ -6400,7 +6513,8 @@ div[data-youtube-video][data-align="right"] {
     line-height: 1.65;
   }
 
-  .story-body > p:first-of-type::first-letter {
+  .story-body > p:first-of-type::first-letter,
+  .story-body > div:first-of-type > p:first-of-type::first-letter {
     font-size: 54px;
   }
 

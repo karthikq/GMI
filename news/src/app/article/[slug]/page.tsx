@@ -41,9 +41,10 @@ const initials = (name: string) =>
 async function ArticleContent({ params, searchParams }: Props) {
   const { slug } = await params;
   const { scheduled } = await searchParams;
-  const [data, user] = await Promise.all([getArticle(slug), getSessionUser()]);
+  const user = await getSessionUser();
+  const data = await getArticle(slug, user?.id);
   if (!data) notFound();
-  const { article, related, ownerId } = data;
+  const { article, related, ownerId, stats } = data;
   const isOwner = Boolean(user && ownerId && ownerId === user.id);
   const saved = user ? await isBookmarked(new ObjectId(user.id), slug) : false;
   const body = article.body ?? [];
@@ -114,6 +115,22 @@ async function ArticleContent({ params, searchParams }: Props) {
               )}
             </div>
           </div>
+          {isOwner && stats && (
+            <dl className="owner-stats" aria-label="Your story's performance">
+              <div>
+                <dt>Views</dt>
+                <dd>{stats.views}</dd>
+              </div>
+              <div>
+                <dt>Readers</dt>
+                <dd>{stats.readers}</dd>
+              </div>
+              <div>
+                <dt>Saves</dt>
+                <dd>{stats.saved}</dd>
+              </div>
+            </dl>
+          )}
         </header>
 
         <figure className="story-cover">

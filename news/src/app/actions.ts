@@ -14,7 +14,12 @@ import { sendNewsletterConfirmEmail, sendWelcomeEmail } from "@/lib/email";
 import { EMAIL_FORMATS, NEWSLETTERS } from "@/lib/newsletters";
 import { PLANS } from "@/lib/plans";
 import { INVITABLE_ROLES, isEditorial, type Role } from "@/lib/roles";
-import { recordRead, toggleBookmark } from "@/lib/reading";
+import {
+  confirmSubscription,
+  createRazorpaySubscription,
+  razorpayKeyId,
+} from "@/lib/razorpay";
+import { recordRead, recordView, toggleBookmark } from "@/lib/reading";
 import {
   deleteArticle,
   insertArticle,
@@ -67,6 +72,12 @@ export async function subscribeLetter(_previous: FormState, formData: FormData):
   if (!found) {
     return { ok: false, message: "Pick a newsletter to subscribe to." };
   }
+  if (found.premium) {
+    return {
+      ok: false,
+      message: `${found.name} is a Premium edition — sign in and pick a plan to subscribe.`,
+    };
+  }
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
@@ -96,11 +107,16 @@ export async function setNewsletter(
 ): Promise<{ ok: true } | { error: string }> {
   const user = await getSessionUser();
   if (!user) return { error: "Sign in to manage newsletters." };
+  const found = NEWSLETTERS.find((item) => item.id === letter);
+  // Desk editions are a paid-plan perk; unsubscribing stays free for readers
+  // who subscribed before their plan lapsed.
+  if (on && found?.premium && user.plan !== "premium" && user.plan !== "premium-plus") {
+    return { error: `${found.name} is a Premium edition — upgrade your plan to subscribe.` };
+  }
   try {
     const result = await setNewsletterSubscription(user.email, letter, on);
     if ("error" in result) return result;
     if (result.added) {
-      const found = NEWSLETTERS.find((item) => item.id === letter);
       if (found) {
         try {
           await sendNewsletterConfirmEmail(user.email, found.name, found.cadence);
@@ -133,9 +149,14 @@ export async function chooseEmailFormat(
 }
 
 // Saves the reader's chosen plan; signed-out readers go to sign in first.
+// Paid plans must go through Cashfree so nobody can grant themselves a paid
+// plan by posting this action directly.
 export async function choosePlan(formData: FormData): Promise<void> {
   const plan = String(formData.get("plan") ?? "");
   if (!PLANS.some((p) => p.id === plan)) return;
+  if (plan !== "free") {
+    redirect(`/subscribe/checkout?plan=${encodeURIComponent(plan)}`);
+  }
   const user = await getSessionUser();
   if (!user) redirect("/signin");
   await connect();
@@ -144,6 +165,41 @@ export async function choosePlan(formData: FormData): Promise<void> {
   if (!isEditorial(user.role)) update.role = plan === "free" ? "reader" : "subscriber";
   await collections.users.updateOne({ _id: new ObjectId(user.id) }, { $set: update });
   redirect("/subscribe");
+}
+
+// Starts a Razorpay autopay subscription for a paid plan and returns the
+// subscription id the browser hands to the Razorpay checkout popup.
+export async function startSubscription(
+  planId: string,
+): Promise<{ keyId: string; subscriptionId: string } | { error: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Sign in to choose a plan." };
+  const plan = PLANS.find((p) => p.id === planId && p.amount > 0);
+  if (!plan) return { error: "That plan can't be purchased online." };
+  try {
+    const { subscriptionId } = await createRazorpaySubscription({
+      userId: user.id,
+      planId: plan.id,
+    });
+    const keyId = razorpayKeyId();
+    if (!keyId) return { error: "Payments aren't configured yet — Razorpay keys are missing." };
+    return { keyId, subscriptionId };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Couldn't start the payment. Try again.",
+    };
+  }
+}
+
+// Called from the Razorpay checkout handler once the mandate is authorised.
+export async function confirmPlan(subscriptionId: string): Promise<{ status: string }> {
+  const user = await getSessionUser();
+  if (!user) return { status: "failed" };
+  try {
+    return { status: await confirmSubscription(user.id, subscriptionId) };
+  } catch {
+    return { status: "pending" };
+  }
 }
 
 export async function signIn(_previous: FormState, formData: FormData): Promise<FormState> {
@@ -363,9 +419,9 @@ export async function toggleSave(
 // Logs that the signed-in reader opened a story. No-ops for guests.
 export async function markArticleRead(slug: string, section: string): Promise<void> {
   const user = await getSessionUser();
-  if (!user) return;
   try {
-    await recordRead(new ObjectId(user.id), slug, section);
+    await recordView(slug);
+    if (user) await recordRead(new ObjectId(user.id), slug, section);
   } catch {}
 }
 

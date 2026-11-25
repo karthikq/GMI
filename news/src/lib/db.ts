@@ -28,6 +28,7 @@ export const collections = {
   bookmarks: db.collection("bookmarks"),
   reads: db.collection("reads"),
   invites: db.collection("invites"),
+  settings: db.collection<{ _id: string; value: string }>("settings"),
 };
 
 // Replaces sections, articles and markets with the sample data. Subscribers are kept.

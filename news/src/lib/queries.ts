@@ -27,6 +27,7 @@ type StoredArticle = {
   updatedAt?: Date;
   tickerOrder?: number;
   authorId?: string;
+  views?: number;
 };
 
 const HOUR = 60 * 60 * 1000;
@@ -472,7 +473,13 @@ export async function fetchArticlesBySlugs(slugs: string[]): Promise<Article[]> 
 
 export async function fetchArticle(
   slug: string,
-): Promise<{ article: Article; related: Article[]; ownerId: string | null } | null> {
+  viewerId?: string,
+): Promise<{
+  article: Article;
+  related: Article[];
+  ownerId: string | null;
+  stats: { views: number; readers: number; saved: number } | null;
+} | null> {
   await connect();
   await io();
   const found = (await collections.articles.findOne({ slug })) as unknown as StoredArticle | null;
@@ -495,10 +502,21 @@ export async function fetchArticle(
     const order = new Map(found.related.map((s, i) => [s, i]));
     related.sort((a, b) => (order.get(a.slug) ?? 0) - (order.get(b.slug) ?? 0));
   }
+  // Engagement stats are only computed for the story's author; other viewers
+  // never receive them in the page payload.
+  let stats: { views: number; readers: number; saved: number } | null = null;
+  if (viewerId && found.authorId === viewerId) {
+    const [readers, saved] = await Promise.all([
+      collections.reads.countDocuments({ slug }),
+      collections.bookmarks.countDocuments({ slug }),
+    ]);
+    stats = { views: found.views ?? 0, readers, saved };
+  }
   return {
     article: present(found, names, { full: true }),
     related: related.map((a) => present(a, names)),
     ownerId: found.authorId ?? null,
+    stats,
   };
 }
 

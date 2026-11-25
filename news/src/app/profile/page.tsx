@@ -87,6 +87,7 @@ async function ProfileContent() {
   }
 
   const followed = stats.desks;
+  const premium = user?.plan === "premium" || user?.plan === "premium-plus";
   const stories = user && isEditorial(user.role) ? await fetchStoryList(user.id) : null;
   const display = user
     ? {
@@ -272,11 +273,13 @@ async function ProfileContent() {
             <h2 className="rule-heading">Newsletters</h2>
             <NewsletterPrefs
               editable={Boolean(user)}
+              premium={Boolean(premium)}
               items={NEWSLETTERS.map((letter) => ({
                 id: letter.id,
                 name: letter.name,
                 blurb: letter.cadence,
                 on: subscribed.has(letter.id),
+                premium: letter.premium,
               }))}
             />
             <p className="side-note">

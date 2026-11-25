@@ -25,6 +25,7 @@ export type SessionUser = {
   createdAt: Date;
   role: Role;
   plan?: string;
+  phone?: string;
 };
 
 // The NextAuth JWT only carries our Mongo user id; profile fields, role and
@@ -58,6 +59,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       createdAt: user.createdAt,
       role: normalizeRole(user.role, user.plan),
       plan: user.plan,
+      phone: user.phone,
     };
   } catch {
     return null;

@@ -1,9 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { setNewsletter, subscribeLetter } from "@/app/actions";
 import NewsletterSampleModal from "./NewsletterSampleModal";
 import type { Newsletter } from "@/lib/newsletters";
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
 
 // One newsletter edition card. Signed-in readers toggle with a button; guests
 // get an email field that enrols that address in just this newsletter.
@@ -39,6 +49,9 @@ export default function NewsletterCard({
   };
 
   const guestDone = Boolean(state?.ok);
+  // Premium editions can't be subscribed to on a free plan; readers already
+  // subscribed keep the toggle so they can still unsubscribe.
+  const locked = Boolean(letter.premium) && !premium;
 
   return (
     <article
@@ -49,7 +62,14 @@ export default function NewsletterCard({
         <span>{letter.cadence}</span>
       </div>
       <h3 className="letter-name">{letter.name}</h3>
-      <p className="letter-topics">{letter.topics.join(" · ")}</p>
+      <p className="letter-topics">
+        {letter.topics.join(" · ")}
+        {letter.premium && (
+          <span className="letter-tag">
+            <LockIcon /> Premium
+          </span>
+        )}
+      </p>
       <p className="letter-blurb">{letter.blurb}</p>
 
       <button
@@ -66,7 +86,14 @@ export default function NewsletterCard({
         Choose format
       </button>
 
-      {signedIn ? (
+      {locked && !on ? (
+        <div className="letter-foot">
+          <Link href="/subscribe" className="button">
+            Upgrade to subscribe
+          </Link>
+          <p className="form-note">Desk editions are part of the paid plans.</p>
+        </div>
+      ) : signedIn ? (
         <div className="letter-foot">
           <button
             type="button"

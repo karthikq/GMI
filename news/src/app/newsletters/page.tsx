@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import NewsletterCard from "@/components/NewsletterCard";
 import { PageSkeleton } from "@/components/States";
@@ -32,8 +33,8 @@ async function Letters() {
         <p className="kicker">Newsletters</p>
         <h1>Pick your briefing</h1>
         <p>
-          Daily and weekly editions from our desks, straight to your inbox. Free for every
-          reader — unsubscribe any time.
+          Daily and weekly editions from our desks, straight to your inbox. Flagship
+          editions are free for every reader; desk editions come with a paid plan.
         </p>
       </header>
 
@@ -42,9 +43,13 @@ async function Letters() {
       <section className="section-block">
         <div className="section-head">
           <h2>Desk editions</h2>
+          <Link href="/subscribe" className="more">
+            Included with Premium →
+          </Link>
         </div>
         <p className="letters-note">
-          One weekly dispatch from every newsroom desk. Pick the beats you follow.
+          One weekly dispatch from every newsroom desk — a paid-plan perk. Pick the
+          beats you follow.
         </p>
         <div className="letters-grid">{DESK_NEWSLETTERS.map(card)}</div>
       </section>
