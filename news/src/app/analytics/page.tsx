@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Offline, PageSkeleton } from "@/components/States";
-import { fetchDashboard } from "@/lib/analytics";
+import { fetchAdminDashboard, fetchDashboard, type AdminDashboard } from "@/lib/analytics";
 import { getSessionUser } from "@/lib/auth";
 import { isEditorial } from "@/lib/roles";
 
@@ -27,10 +27,11 @@ async function DashboardContent() {
     );
   }
 
-  // Journalists see their own stories; editors and admins see the whole newsroom.
-  const ownOnly = user.role === "journalist";
-  const data = await fetchDashboard(ownOnly ? user.id : undefined).catch(() => null);
+  // Editors and journalists track their own stories; admins get a newsroom view.
+  const isAdmin = user.role === "admin";
+  const data = await (isAdmin ? fetchAdminDashboard() : fetchDashboard(user.id)).catch(() => null);
   if (!data) return <Offline />;
+  const adminData = isAdmin ? (data as AdminDashboard) : null;
 
   const { totals, daily, desks, top } = data;
   const maxDaily = Math.max(1, ...daily.map((d) => d.count));
@@ -39,10 +40,12 @@ async function DashboardContent() {
   return (
     <>
       <header className="page-head">
-        <h1>Analytics</h1>
+        <p className="kicker">{isAdmin ? "Admin" : "Newsroom"}</p>
+        <h1>{isAdmin ? "Newsroom analytics" : "Your article performance"}</h1>
         <p>
-          {ownOnly ? "Your stories" : "The whole newsroom"} · readers are signed-in people who opened a
-          story
+          {isAdmin
+            ? "Sitewide story, audience and newsletter activity."
+            : "Your stories · readers are signed-in people who opened a story"}
         </p>
       </header>
 
@@ -64,10 +67,46 @@ async function DashboardContent() {
           <dd>{totals.readers}</dd>
         </div>
         <div>
-          <dt>Readers per story</dt>
-          <dd>{totals.perStory}</dd>
+          <dt>{isAdmin ? "Views" : "Readers per story"}</dt>
+          <dd>{isAdmin ? totals.views : totals.perStory}</dd>
         </div>
       </dl>
+
+      {adminData && (
+        <section className="section-block">
+          <div className="section-head">
+            <h2>Audience &amp; delivery</h2>
+          </div>
+          <dl className="profile-stats">
+            <div>
+              <dt>Accounts</dt>
+              <dd>{adminData.audience.accounts}</dd>
+            </div>
+            <div>
+              <dt>Editorial staff</dt>
+              <dd>{adminData.audience.editorial}</dd>
+            </div>
+            <div>
+              <dt>Subscriber addresses</dt>
+              <dd>{adminData.audience.subscriberAddresses}</dd>
+            </div>
+            <div>
+              <dt>Newsletter subscriptions</dt>
+              <dd>{adminData.audience.subscriptions}</dd>
+            </div>
+            <div>
+              <dt>Emails sent</dt>
+              <dd>{adminData.audience.emailsSent}</dd>
+            </div>
+            <div>
+              <dt>Failed / skipped</dt>
+              <dd>
+                {adminData.audience.emailsFailed} / {adminData.audience.emailsSkipped}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
 
       <div className="interior">
         <div>
@@ -130,6 +169,30 @@ async function DashboardContent() {
               <p className="side-note">No readers yet.</p>
             )}
           </section>
+
+          {adminData && (
+            <section className="side-block">
+              <h2 className="rule-heading">Staff performance</h2>
+              {adminData.staff.length ? (
+                <ol className="trend">
+                  {adminData.staff.map((member, index) => (
+                    <li key={member.id}>
+                      <span className="rank">{index + 1}</span>
+                      <div>
+                        <h3>{member.name}</h3>
+                        <span className="kicker muted">
+                          {member.role} · {member.published} published · {member.scheduled} scheduled ·{" "}
+                          {member.readers} {member.readers === 1 ? "reader" : "readers"} · {member.views} views
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="side-note">No staff stories yet.</p>
+              )}
+            </section>
+          )}
         </aside>
       </div>
     </>

@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import ArticleCard from "@/components/ArticleCard";
+import ArticleCard, { ArticleImage, Meta } from "@/components/ArticleCard";
 import { Offline, PageSkeleton } from "@/components/States";
 import { getArticles, getSections } from "@/lib/api";
 
@@ -15,15 +16,40 @@ async function SectionContent({ params }: Props) {
   if (!section) notFound();
 
   const [first, ...rest] = result.articles;
+  const minis = rest.slice(0, 4);
+  const gridArticles = rest.slice(4);
   return (
     <>
       <header className="page-head">
         <h1>{section.name}</h1>
         <p>{section.blurb}</p>
       </header>
-      {first && <ArticleCard article={first} variant="row" showSection={false} />}
+      {first && (
+        <section className="section-hero">
+          <article className="section-lead">
+            <Link href={`/article/${first.slug}`} className="card-image" tabIndex={-1} aria-hidden="true">
+              <ArticleImage article={first} />
+            </Link>
+            <div className="card-body">
+              <span className="kicker muted">{first.city}</span>
+              <h2>
+                <Link href={`/article/${first.slug}`}>{first.title}</Link>
+              </h2>
+              <p className="dek">{first.dek}</p>
+              <Meta article={first} />
+            </div>
+          </article>
+          {minis.length > 0 && (
+            <div className="section-minis">
+              {minis.map((article) => (
+                <ArticleCard key={article.slug} article={article} variant="mini" showSection={false} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       <div className="grid">
-        {rest.map((article) => (
+        {gridArticles.map((article) => (
           <ArticleCard key={article.slug} article={article} showSection={false} />
         ))}
       </div>

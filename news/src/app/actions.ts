@@ -1,7 +1,7 @@
 "use server";
 
 import { ObjectId } from "mongodb";
-import { refresh } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { signIn as naSignIn, signOut as naSignOut } from "@/auth";
 import { getSessionUser } from "@/lib/auth";
@@ -506,6 +506,7 @@ export async function createArticle(input: ArticleInput): Promise<{ message: str
   } catch {
     return { message: "Can't reach the news server. Try again shortly." };
   }
+  revalidatePath("/", "layout");
   redirect(`/article/${result.slug}${result.scheduled ? "?scheduled=1" : ""}`);
 }
 
@@ -515,6 +516,7 @@ export async function updateStory(slug: string, input: ArticleInput): Promise<{ 
   if (!user || !isEditorial(user.role)) return { message: "Only editorial staff can edit stories." };
   const result = await updateArticle(slug, input, user.id);
   if ("error" in result) return { message: result.error };
+  revalidatePath("/", "layout");
   redirect(`/article/${result.slug}`);
 }
 
@@ -524,6 +526,7 @@ export async function deleteStory(slug: string): Promise<{ message: string } | v
   if (!user || !isEditorial(user.role)) return { message: "Only editorial staff can delete stories." };
   const result = await deleteArticle(slug, user.id);
   if ("error" in result) return { message: result.error };
+  revalidatePath("/", "layout");
   redirect("/");
 }
 

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Archivo, Inter, JetBrains_Mono, Montserrat, Newsreader } from "next/font/google";
+import { Suspense } from "react";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import ScrollToArticleStart from "@/components/ScrollToArticleStart";
 import "./globals.css";
 
 const display2 = Newsreader({ variable: "--font-display", subsets: ["latin"] });
@@ -40,6 +42,9 @@ export default function RootLayout({
         <a href="#main" className="skip-link">
           Skip to content
         </a>
+        <Suspense fallback={null}>
+          <ScrollToArticleStart />
+        </Suspense>
         <Header />
         <main id="main" className="container main">
           {children}

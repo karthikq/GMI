@@ -2,16 +2,15 @@
 
 import { useEffect } from "react";
 
-// Fades and slides elements matching `selector` in as they scroll into view.
-// Elements already on screen when the page loads are left alone so nothing
-// above the fold flashes.
+// Marks matching elements with data-reveal, then flips it to "visible" when
+// they enter the frame. Above-the-fold content is left untouched to avoid a flash.
 export default function ScrollReveal({ selector }: { selector: string }) {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (!("IntersectionObserver" in window)) return;
 
     const settle = (el: HTMLElement) => {
-      el.classList.remove("reveal", "is-in");
+      el.removeAttribute("data-reveal");
       el.style.removeProperty("--reveal-delay");
     };
 
@@ -27,10 +26,10 @@ export default function ScrollReveal({ selector }: { selector: string }) {
             settle(el);
           };
           el.addEventListener("transitionend", done);
-          el.classList.add("is-in");
+          el.setAttribute("data-reveal", "visible");
         }
       },
-      { rootMargin: "0px 0px -10% 0px" },
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.12 },
     );
 
     const targets = Array.from(document.querySelectorAll<HTMLElement>(selector));
@@ -40,7 +39,7 @@ export default function ScrollReveal({ selector }: { selector: string }) {
         ? Array.from(el.parentElement.children).filter((child) => targets.includes(child as HTMLElement))
         : [el];
       el.style.setProperty("--reveal-delay", `${(siblings.indexOf(el) % 4) * 90}ms`);
-      el.classList.add("reveal");
+      el.setAttribute("data-reveal", "");
       observer.observe(el);
     }
 

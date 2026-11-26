@@ -79,13 +79,17 @@ async function HomeContent() {
       </section>
 
       {across.length > 0 && (
-        <section className="band">
-          <div className="section-head">
+        <section className="band across-band">
+          <div className="across-head">
             <h2>Across the desks</h2>
+            <span className="across-rule" aria-hidden="true" />
+            <Link href="/archive" className="across-more">
+              Full front page →
+            </Link>
           </div>
-          <div className="grid four">
+          <div className="across-grid">
             {across.map((article) => (
-              <ArticleCard key={article.slug} article={article} />
+              <ArticleCard key={article.slug} article={article} variant="across" />
             ))}
           </div>
         </section>
@@ -260,6 +264,9 @@ async function HomeContent() {
 const REVEAL_TARGETS = [
   ".front-briefs > *",
   ".front .lead",
+  ".front-top > *",
+  ".across-head",
+  ".across-grid > *",
   ".band .section-head",
   ".grid.four > *",
   ".desk",
