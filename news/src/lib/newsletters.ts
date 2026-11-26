@@ -3,7 +3,7 @@
 
 // Email template options for the example-email preview. The first entry is the
 // default and the only free format; every other format is a paid plan perk.
-// `id` is stored on the subscriber's `format` field, so keep ids stable.
+// `id` is stored in the subscriber's `letterFormats` map, so keep ids stable.
 export type EmailFormat = {
   id: string;
   name: string;
@@ -46,7 +46,8 @@ export type SampleStory = {
   tag: string;
   title: string;
   summary: string;
-  image: string;
+  image?: string;
+  url?: string;
 };
 
 export type SampleEmail = {

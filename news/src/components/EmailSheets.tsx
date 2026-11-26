@@ -6,11 +6,24 @@ import type { Newsletter, SampleStory } from "@/lib/newsletters";
    free format; the rest are premium. */
 
 function Img({ story, className }: { story: SampleStory; className?: string }) {
+  // Real issues may have image-less stories — render nothing rather than a
+  // broken icon (a localhost or missing src can't load in an inbox anyway).
+  if (!story.image) return null;
+  // Remote placeholder photos; next/image gains nothing inside the preview.
+  const img = (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={story.image} alt={story.title} loading="lazy" width={560} style={{ maxWidth: "100%" }} />
+  );
   return (
     <div className={className}>
-      {/* Remote placeholder photos; next/image gains nothing inside the preview. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={story.image} alt={story.title} loading="lazy" />
+      {/* Real issues link each image through to the story on the site. */}
+      {story.url ? (
+        <a href={story.url} target="_blank" rel="noopener noreferrer">
+          {img}
+        </a>
+      ) : (
+        img
+      )}
     </div>
   );
 }
@@ -33,7 +46,7 @@ function CoffeeCup() {
 
 /* ---- Daily Edition (default, free): black & white front page --------------- */
 
-function DailySheet({ letter }: { letter: Newsletter }) {
+function DailySheet({ letter, issueDate }: { letter: Newsletter; issueDate?: string }) {
   const { sample } = letter;
   const [lead, second, third, ...rest] = sample.stories;
   return (
@@ -41,12 +54,12 @@ function DailySheet({ letter }: { letter: Newsletter }) {
       <div className="fmt-daily-logo">
         {/* Static brand asset; matches how the header renders the logo. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="Good Morning Indian" />
+        <img src="/logo.png" alt="Good Morning Indian" width={380} style={{ maxWidth: "100%" }} />
       </div>
       <div className="fmt-daily-meta">
         <span>{letter.name}</span>
         <span>{sample.volNumber}</span>
-        <span>{nextIssueDate(letter.cadence)}</span>
+        <span>{issueDate ?? nextIssueDate(letter.cadence)}</span>
       </div>
       <h1 className="fmt-daily-headline">{sample.headline}</h1>
       <p className="fmt-daily-subtitle">{letter.tagline}</p>
@@ -95,7 +108,7 @@ function DailySheet({ letter }: { letter: Newsletter }) {
 
 /* ---- Classic Broadsheet ---------------------------------------------------- */
 
-function ClassicSheet({ letter }: { letter: Newsletter }) {
+function ClassicSheet({ letter, issueDate }: { letter: Newsletter; issueDate?: string }) {
   const { sample } = letter;
   return (
     <div className="email-sheet">
@@ -107,7 +120,7 @@ function ClassicSheet({ letter }: { letter: Newsletter }) {
       <div className="email-sheet-bar">
         <span>{sample.volNumber}</span>
         <span className="email-sheet-sub">{sample.subHeader}</span>
-        <span>{nextIssueDate(letter.cadence)}</span>
+        <span>{issueDate ?? nextIssueDate(letter.cadence)}</span>
       </div>
       <div className="email-sheet-topics">{letter.topics.join("  /  ")}  /  A BRIGHTER TOMORROW</div>
       <div className="email-sheet-lead">
@@ -212,7 +225,7 @@ function CorporateSheet({ letter }: { letter: Newsletter }) {
 
 /* ---- Heritage Print (vintage club gazette) -------------------------------- */
 
-function HeritageSheet({ letter }: { letter: Newsletter }) {
+function HeritageSheet({ letter, issueDate }: { letter: Newsletter; issueDate?: string }) {
   const { sample } = letter;
   const [lead, second, third, ...rest] = sample.stories;
   return (
@@ -220,7 +233,7 @@ function HeritageSheet({ letter }: { letter: Newsletter }) {
       <div className="fmt-her-top">
         <span>Special Edition</span>
         <span>{sample.volNumber}</span>
-        <span>{nextIssueDate(letter.cadence)}</span>
+        <span>{issueDate ?? nextIssueDate(letter.cadence)}</span>
       </div>
       <h1 className="fmt-her-masthead">{letter.name}</h1>
       <div className="fmt-her-rule" />
@@ -274,7 +287,7 @@ function HeritageSheet({ letter }: { letter: Newsletter }) {
 
 /* ---- Scrapbook Post (collage & sticky notes) ------------------------------- */
 
-function ScrapbookSheet({ letter }: { letter: Newsletter }) {
+function ScrapbookSheet({ letter, issueDate }: { letter: Newsletter; issueDate?: string }) {
   const { sample } = letter;
   const notes = [
     { className: "fmt-scrap-note yellow", text: letter.topics[0] },
@@ -287,7 +300,7 @@ function ScrapbookSheet({ letter }: { letter: Newsletter }) {
       <h1 className="fmt-scrap-title">{letter.name}</h1>
       <p className="fmt-scrap-tag">{letter.topics.join("  *  ")}</p>
       <p className="fmt-scrap-meta">
-        {sample.volNumber} · {nextIssueDate(letter.cadence)} · {letter.cadence}
+        {sample.volNumber} · {issueDate ?? nextIssueDate(letter.cadence)} · {letter.cadence}
       </p>
       <div className="fmt-scrap-collage">
         {sample.stories.map((story, index) => (
@@ -391,7 +404,7 @@ function StorefrontSheet({ letter }: { letter: Newsletter }) {
 
 /* ---- Skyline Dispatch: dark navy & sky-blue company summary --------------- */
 
-function SkylineSheet({ letter }: { letter: Newsletter }) {
+function SkylineSheet({ letter, issueDate }: { letter: Newsletter; issueDate?: string }) {
   const { sample } = letter;
   const [lead, second, third, ...rest] = sample.stories;
   return (
@@ -399,7 +412,7 @@ function SkylineSheet({ letter }: { letter: Newsletter }) {
       <div className="fmt-sky-top">
         <span>Good Morning Indian</span>
         <i aria-hidden="true" />
-        <span>{nextIssueDate(letter.cadence)}</span>
+        <span>{issueDate ?? nextIssueDate(letter.cadence)}</span>
       </div>
       <div className="fmt-sky-head">
         <h1 className="fmt-sky-masthead">{letter.name}</h1>
@@ -433,7 +446,7 @@ function SkylineSheet({ letter }: { letter: Newsletter }) {
 
 /* ---- Modern Digest: clean numbered briefing -------------------------------- */
 
-function DigestSheet({ letter }: { letter: Newsletter }) {
+function DigestSheet({ letter, issueDate }: { letter: Newsletter; issueDate?: string }) {
   const { sample } = letter;
   const [lead] = sample.stories;
   return (
@@ -441,7 +454,7 @@ function DigestSheet({ letter }: { letter: Newsletter }) {
       <div className="fmt-dig-inner">
         <div className="fmt-dig-top">
           <span className="fmt-dig-logo">GMI</span>
-          <span className="fmt-dig-date">{nextIssueDate(letter.cadence)}</span>
+          <span className="fmt-dig-date">{issueDate ?? nextIssueDate(letter.cadence)}</span>
         </div>
         <h1 className="fmt-dig-title">{letter.name}</h1>
         <p className="fmt-dig-hello">
@@ -551,7 +564,15 @@ function SocialGlyph({ kind }: { kind: "instagram" | "facebook" | "linkedin" | "
 
 // The sign-off a real inbox email ends with — appended under every format
 // skin in the preview so each one reads like a complete newsletter.
-function SheetFoot({ letter }: { letter: Newsletter }) {
+function SheetFoot({ letter, siteUrl }: { letter: Newsletter; siteUrl?: string }) {
+  const link = (label: string) =>
+    siteUrl ? (
+      <a href={`${siteUrl}/newsletters`} style={{ color: "inherit" }}>
+        {label}
+      </a>
+    ) : (
+      <span>{label}</span>
+    );
   return (
     <div className="fmt-sfoot">
       <p className="fmt-sfoot-note">Illustrative market figures, not live quotes.</p>
@@ -566,7 +587,13 @@ function SheetFoot({ letter }: { letter: Newsletter }) {
       <div className="fmt-sfoot-share">
         <h3>Enjoyed your morning read?</h3>
         <p>Share Good Morning India with someone who loves staying informed.</p>
-        <span className="fmt-sfoot-share-btn">Share this newsletter</span>
+        {siteUrl ? (
+          <a href={siteUrl} className="fmt-sfoot-share-btn" style={{ color: "inherit", textDecoration: "none" }}>
+            Share this newsletter
+          </a>
+        ) : (
+          <span className="fmt-sfoot-share-btn">Share this newsletter</span>
+        )}
       </div>
       <div className="fmt-sfoot-social">
         <SocialGlyph kind="instagram" />
@@ -578,9 +605,9 @@ function SheetFoot({ letter }: { letter: Newsletter }) {
         You&rsquo;re receiving this email because you subscribed to {letter.name}.
       </p>
       <p className="fmt-sfoot-links">
-        <span>Unsubscribe</span>
-        <span>Manage preferences</span>
-        <span>Privacy policy</span>
+        {link("Unsubscribe")}
+        {link("Manage preferences")}
+        {link("Privacy policy")}
       </p>
       <p className="fmt-sfoot-copy">
         © {new Date().getFullYear()} Good Morning India. All rights reserved.
@@ -591,32 +618,50 @@ function SheetFoot({ letter }: { letter: Newsletter }) {
 
 /* ------------------------------------------------------------------------- */
 
-function SheetSkin({ format, letter }: { format: string; letter: Newsletter }) {
+function SheetSkin({
+  format,
+  letter,
+  issueDate,
+}: {
+  format: string;
+  letter: Newsletter;
+  issueDate?: string;
+}) {
   switch (format) {
     case "corporate":
       return <CorporateSheet letter={letter} />;
     case "heritage":
-      return <HeritageSheet letter={letter} />;
+      return <HeritageSheet letter={letter} issueDate={issueDate} />;
     case "scrapbook":
-      return <ScrapbookSheet letter={letter} />;
+      return <ScrapbookSheet letter={letter} issueDate={issueDate} />;
     case "storefront":
       return <StorefrontSheet letter={letter} />;
     case "skyline":
-      return <SkylineSheet letter={letter} />;
+      return <SkylineSheet letter={letter} issueDate={issueDate} />;
     case "digest":
-      return <DigestSheet letter={letter} />;
+      return <DigestSheet letter={letter} issueDate={issueDate} />;
     case "classic":
-      return <ClassicSheet letter={letter} />;
+      return <ClassicSheet letter={letter} issueDate={issueDate} />;
     default:
-      return <DailySheet letter={letter} />;
+      return <DailySheet letter={letter} issueDate={issueDate} />;
   }
 }
 
-export default function EmailSheet({ format, letter }: { format: string; letter: Newsletter }) {
+export default function EmailSheet({
+  format,
+  letter,
+  issueDate,
+  siteUrl,
+}: {
+  format: string;
+  letter: Newsletter;
+  issueDate?: string;
+  siteUrl?: string;
+}) {
   return (
     <>
-      <SheetSkin format={format} letter={letter} />
-      <SheetFoot letter={letter} />
+      <SheetSkin format={format} letter={letter} issueDate={issueDate} />
+      <SheetFoot letter={letter} siteUrl={siteUrl} />
     </>
   );
 }

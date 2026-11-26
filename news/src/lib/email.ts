@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { createElement } from "react";
+import EmailSheet from "@/components/EmailSheets";
+import { EMAIL_SKIN_CSS } from "./emailSkinsCss";
+import { buildIssueLetter } from "./issue";
 import type { Newsletter } from "./newsletters";
-import { NEWSLETTERS } from "./newsletters";
+import { EMAIL_FORMATS, NEWSLETTERS } from "./newsletters";
 import type { Plan } from "./plans";
 import { recordDelivery } from "./queries";
 
@@ -130,55 +134,200 @@ function planConfirmHtml(name: string, plan: Plan, siteUrl: string, logoUrl: str
 // the admin dashboard can show it. "skipped" means the local dev no-op.
 export type SendStatus = "sent" | "skipped" | "failed";
 
-// A delivered newsletter issue, rendered from the letter's sample edition.
-// Table-free inline styling so it renders sanely in most mail clients.
-function newsletterIssueHtml(
+// Gmail discards a <style> block once the combined embedded CSS passes
+// 16,384 characters, so each email embeds only its own skin plus the shared
+// footer. Custom properties are resolved to literals because Gmail and
+// Outlook drop declarations containing var(), which would leave the mail unstyled.
+const CSS_VARS: Record<string, string> = {
+  "--paper": "#f5f4f0",
+  "--surface": "#ffffff",
+  "--ink": "#14171c",
+  "--ink-soft": "#4a5059",
+  "--ink-mute": "#7a808a",
+  "--line": "#dcdad3",
+  "--accent": "#c8102e",
+  "--accent-dark": "#9a0c23",
+  "--live": "#d9381e",
+  "--up": "#0f7a4d",
+  "--band": "#eceae4",
+  "--panel": "#14171c",
+  "--font-sans": "Arial, Helvetica, sans-serif",
+  "--font-mono": "'Courier New', Courier, monospace",
+  "--font-display": "Georgia, 'Times New Roman', serif",
+  "--font-heading": "Arial, Helvetica, sans-serif",
+  "--font-geometric": "Arial, Helvetica, sans-serif",
+};
+
+// flex, grid, clamp(), min()/max(), gap and aspect-ratio are dropped by Gmail
+// and Outlook, collapsing every layout. Downgrade them: flex/grid → block so
+// children stack, clamp/min/max → their first (minimum) value, then restore
+// horizontal rhythm where spans ran together via EMAIL_PATCH.
+const EMAIL_PATCH = `
+.fmt-daily-meta span,.fmt-daily-foot span,.fmt-her-top span,.fmt-her-access span,
+.fmt-sky-top span,.fmt-sky-top i,.fmt-store-head span,.fmt-dig-top span,
+.email-sheet-top span,.email-sheet-bar span,.fmt-corp-kicker span,.fmt-corp-kicker i,
+.fmt-sfoot-links span{display:inline-block;margin-right:14px;vertical-align:middle}
+.email-sheet-foot>div,.fmt-store-foot>div{display:inline-block;margin:0 22px 8px 0;vertical-align:top}
+img{max-width:100%;height:auto}`;
+
+// Gmail discards the ENTIRE <style> block when it meets a selector it can't
+// parse — pseudo-classes/elements (:hover, ::before, :first-child), attribute
+// selectors, the ~ sibling combinator, or non-media at-rules. The skin CSS
+// contains several, so rules are filtered one by one; anything left keeps
+// working instead of taking down the whole stylesheet.
+const UNSAFE_SELECTOR = /[:[\]~]/;
+
+type CssBlock = { selector: string; text: string };
+
+function topLevelBlocks(css: string): CssBlock[] {
+  const blocks: CssBlock[] = [];
+  const n = css.length;
+  let i = 0;
+  while (i < n) {
+    while (i < n && /\s/.test(css[i])) i++;
+    if (css.startsWith("/*", i)) {
+      const end = css.indexOf("*/", i);
+      i = end < 0 ? n : end + 2;
+      continue;
+    }
+    if (i >= n) break;
+    const start = i;
+    let brace = -1;
+    for (let j = i; j < n; j++) {
+      if (css.startsWith("/*", j)) {
+        const end = css.indexOf("*/", j);
+        j = end < 0 ? n - 1 : end + 1;
+        continue;
+      }
+      if (css[j] === "{") {
+        brace = j;
+        break;
+      }
+      if (css[j] === ";") {
+        i = j + 1;
+        break;
+      }
+    }
+    if (brace < 0) break;
+    const selector = css.slice(start, brace).trim();
+    let depth = 1;
+    let j = brace + 1;
+    for (; j < n; j++) {
+      if (css.startsWith("/*", j)) {
+        const end = css.indexOf("*/", j);
+        j = end < 0 ? n - 1 : end + 1;
+        continue;
+      }
+      if (css[j] === "{") depth++;
+      else if (css[j] === "}") {
+        depth--;
+        if (!depth) {
+          j++;
+          break;
+        }
+      }
+    }
+    blocks.push({ selector, text: css.slice(start, j) });
+    i = j;
+  }
+  return blocks;
+}
+
+function sanitizeForEmail(css: string): string {
+  const kept: string[] = [];
+  for (const block of topLevelBlocks(css)) {
+    if (block.selector.startsWith("@")) {
+      if (!/^@media\b/i.test(block.selector)) continue;
+      const inner = block.text.slice(block.text.indexOf("{") + 1, block.text.lastIndexOf("}"));
+      const keptInner = sanitizeForEmail(inner);
+      if (keptInner) kept.push(`${block.selector}{${keptInner}}`);
+      continue;
+    }
+    if (!UNSAFE_SELECTOR.test(block.selector)) kept.push(block.text);
+  }
+  return kept.join("\n");
+}
+
+const SKIN_CSS_PREFIXES: Record<string, string[]> = {
+  daily: [".fmt-sheet", ".fmt-daily", ".fmt-sfoot"],
+  classic: [
+    ".email-sheet",
+    ".email-lead",
+    ".email-cup",
+    ".email-quote",
+    ".email-story",
+    ".email-foot",
+    ".email-cta",
+    ".fmt-sfoot",
+  ],
+  corporate: [".fmt-sheet", ".fmt-corp", ".fmt-sfoot"],
+  heritage: [".fmt-sheet", ".fmt-heritage", ".fmt-her", ".fmt-sfoot"],
+  scrapbook: [".fmt-sheet", ".fmt-scrap", ".fmt-sfoot"],
+  storefront: [".fmt-sheet", ".fmt-store", ".fmt-sfoot"],
+  skyline: [".fmt-sheet", ".fmt-sky", ".fmt-sfoot"],
+  digest: [".fmt-sheet", ".fmt-digest", ".fmt-dig", ".fmt-sfoot"],
+};
+
+function filterCssForSkin(css: string, skin: string): string {
+  const prefixes = SKIN_CSS_PREFIXES[skin] ?? SKIN_CSS_PREFIXES.daily;
+  const kept: string[] = [];
+  for (const block of topLevelBlocks(css)) {
+    if (block.selector.startsWith("@")) {
+      if (!/^@media\b/i.test(block.selector)) continue;
+      const inner = block.text.slice(block.text.indexOf("{") + 1, block.text.lastIndexOf("}"));
+      const keptInner = filterCssForSkin(inner, skin);
+      if (keptInner) kept.push(`${block.selector}{${keptInner}}`);
+      continue;
+    }
+    if (block.selector === "img" || prefixes.some((prefix) => block.selector.includes(prefix))) {
+      kept.push(block.text);
+    }
+  }
+  return kept.join("\n");
+}
+
+const minifiedSkinCss: Record<string, string> = {};
+function emailSkinCss(skin: string): string {
+  if (!minifiedSkinCss[skin]) {
+    const compiled = `${EMAIL_SKIN_CSS}${EMAIL_PATCH}`
+      .replace(/var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)/g, (_match, name, fallback) =>
+        String(CSS_VARS[name as string] ?? fallback ?? "inherit"),
+      )
+      .replace(/clamp\(\s*([^,)]+),[^)]*\)/g, "$1")
+      .replace(/(?:min|max)\(\s*([^,)]+),[^)]*\)/g, "$1")
+      .replace(/display\s*:\s*(?:inline-)?(?:flex|grid)/g, "display:block");
+    minifiedSkinCss[skin] = sanitizeForEmail(filterCssForSkin(compiled, skin))
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*([{}:;,>])\s*/g, "$1")
+      .trim();
+  }
+  return minifiedSkinCss[skin];
+}
+
+// A delivered newsletter issue: real stories rendered in the format the reader
+// picked on /newsletters. The same EmailSheet skins used by the preview are
+// rendered to static markup and styled by the embedded skin CSS.
+async function newsletterIssueHtml(
   letter: Newsletter,
   issueDate: string,
+  format: string | undefined,
   logoUrl: string,
   siteUrl: string,
-): string {
-  const s = letter.sample;
-  const quote = s.quote
-    ? `<div style="margin:24px 0;padding:18px 20px;border-left:3px solid #c8102e;background:#eceae4">
-        <p style="margin:0 0 4px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c8102e">${escape(s.quote.kicker)}</p>
-        <p style="margin:0 0 6px;font-family:Georgia,serif;font-size:17px;font-style:italic;line-height:1.4;color:#14171c">&ldquo;${escape(s.quote.text)}&rdquo;</p>
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#7a808a">${escape(s.quote.attribution)}</p>
-      </div>`
-    : "";
-  const stories = s.stories
-    .map(
-      (story) => `<div style="margin:0 0 18px;padding-bottom:18px;border-bottom:1px solid #dcdad3">
-        <img src="${escape(story.image)}" alt="" width="512" style="display:block;width:100%;max-width:512px;margin-bottom:10px" />
-        <p style="margin:0 0 4px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c8102e">${escape(story.tag)}</p>
-        <p style="margin:0 0 6px;font-family:Georgia,serif;font-size:18px;font-weight:700;line-height:1.25;color:#14171c">${escape(story.title)}</p>
-        <p style="margin:0;font-size:13px;line-height:1.55;color:#4a5059">${escape(story.summary)}</p>
-      </div>`,
-    )
-    .join("");
+): Promise<string> {
+  const skin = EMAIL_FORMATS.some((item) => item.id === format) ? String(format) : "daily";
+  const issueLetter = await buildIssueLetter(letter, issueDate, siteUrl);
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const body = renderToStaticMarkup(
+    createElement(EmailSheet, { format: skin, letter: issueLetter, issueDate, siteUrl }),
+  ).replace(/src="\/logo\.png"/g, `src="${logoUrl}"`);
   return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#f5f4f0">
-  <div style="max-width:560px;margin:0 auto;padding:32px 24px 40px;font-family:Arial,Helvetica,sans-serif;color:#14171c">
-    <img src="${logoUrl}" alt="Good Morning Indian" width="170" style="display:block;margin-bottom:20px" />
-    <div style="display:flex;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid #dcdad3;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#7a808a">
-      <span>${escape(s.topBannerLeft || letter.name)}</span>
-      <span>${escape(issueDate)}</span>
-    </div>
-    <p style="margin:14px 0 2px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#7a808a">${escape(s.volNumber)}</p>
-    <p style="margin:0 0 14px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c8102e">${escape(s.subHeader)}</p>
-    <h1 style="margin:0 0 10px;font-family:Georgia,serif;font-size:30px;font-weight:700;line-height:1.15;color:#14171c">${escape(s.headline)}</h1>
-    <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#4a5059">${escape(s.leadDek)}</p>
-    ${quote}
-    ${stories}
-    <div style="margin:24px 0;text-align:center">
-      <a href="${siteUrl}" style="display:inline-block;padding:12px 28px;background:#14171c;color:#f5f4f0;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none">${escape(s.ctaText)}</a>
-    </div>
-    <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#7a808a">${escape(s.footerTag)}</p>
-    <p style="margin:0;font-size:11px;line-height:1.6;color:#7a808a">
-      You&rsquo;re receiving ${escape(letter.name)} ${escape(letter.cadence.toLowerCase())} ·
-      <a href="${siteUrl}/newsletters" style="color:#c8102e">Manage newsletters</a>
-    </p>
-  </div>
+<html><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>${emailSkinCss(skin)}</style>
+</head><body style="margin:0;padding:0;background:#f5f4f0">
+<div style="max-width:640px;margin:0 auto">${body}</div>
 </body></html>`;
 }
 
@@ -256,6 +405,7 @@ export async function sendNewsletterIssueEmail(
   to: string,
   letter: Newsletter,
   issueDate: string,
+  format?: string,
 ): Promise<SendStatus> {
   const siteUrl = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
   const logo = logoForEmail(siteUrl);
@@ -263,7 +413,7 @@ export async function sendNewsletterIssueEmail(
     to,
     undefined,
     `${letter.name} — ${issueDate}`,
-    newsletterIssueHtml(letter, issueDate, logo.src, siteUrl),
+    await newsletterIssueHtml(letter, issueDate, format, logo.src, siteUrl),
     logo.attachment,
   );
   try {

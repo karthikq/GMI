@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ObjectId } from "mongodb";
 import { Fragment, Suspense } from "react";
 import ArticleCard, { ArticleImage } from "@/components/ArticleCard";
+import EmbedHydrator from "@/components/EmbedHydrator";
 import OwnerActions from "@/components/OwnerActions";
 import ReadTracker from "@/components/ReadTracker";
 import ReadingProgress from "@/components/ReadingProgress";
@@ -139,6 +140,7 @@ async function ArticleContent({ params, searchParams }: Props) {
         </figure>
 
         <div className="story-body">
+          <EmbedHydrator />
           {body.map((paragraph, index) => (
             <Fragment key={index}>
               {quote && index === 2 && (

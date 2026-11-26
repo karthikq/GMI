@@ -21,6 +21,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { uploadArticleImage } from "@/lib/image";
 import { ADULT_WORDS_PATTERN } from "@/lib/censor";
+import { decodeEmbedHtml, encodeEmbedHtml, injectEmbedHtml } from "@/lib/embed";
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ");
 
@@ -34,7 +35,10 @@ function toBlocks(html: string): string[] {
   const doc = new DOMParser().parseFromString(html, "text/html");
   return Array.from(doc.body.children)
     .filter(
-      (el) => stripHtml(el.outerHTML).replace(/&nbsp;/g, " ").trim() || hasMedia(el),
+      (el) =>
+        stripHtml(el.outerHTML).replace(/&nbsp;/g, " ").trim() ||
+        hasMedia(el) ||
+        el.hasAttribute("data-rawembed"),
     )
     .map((el) => el.outerHTML);
 }
@@ -156,19 +160,52 @@ const promptYoutubeUrl = () => {
   return null;
 };
 
-// Accepts a plain embed URL or a full <iframe src="…"> snippet; only http(s)
-// sources are kept so javascript: URLs can't slip into published stories.
-const promptEmbedSrc = () => {
-  const input = window.prompt("Embed URL or <iframe> code", "https://");
+// Accepts an embed URL, a full <iframe src="…"> snippet, or any other embed
+// markup (X/Instagram/TikTok blockquotes with script tags). Returns the node
+// spec to insert; only http(s) sources are kept so javascript: URLs can't slip
+// into published stories.
+const promptEmbed = ():
+  | { type: "iframeEmbed"; attrs: { src: string } }
+  | { type: "rawEmbed"; attrs: { html: string } }
+  | null => {
+  const input = window.prompt(
+    "Embed URL, <iframe> code, or any embed code (e.g. an X post)",
+    "https://",
+  );
   if (!input) return null;
-  let src = input.trim();
-  const iframe = src.match(/<iframe[^>]*\bsrc=["']([^"']+)["']/i);
-  if (iframe) src = iframe[1];
-  if (!/^https?:\/\//i.test(src)) {
-    window.alert("Enter a valid embed URL or iframe code.");
-    return null;
+  const trimmed = input.trim();
+
+  const iframe = trimmed.match(/<iframe[^>]*\bsrc=["']([^"']+)["']/i);
+  if (iframe) {
+    if (!/^https?:\/\//i.test(iframe[1])) {
+      window.alert("Enter a valid embed URL or iframe code.");
+      return null;
+    }
+    return { type: "iframeEmbed", attrs: { src: iframe[1] } };
   }
-  return src;
+  // Other markup — an X <blockquote class="twitter-tweet">, Instagram embed,
+  // etc. Stored raw; provider scripts hydrate it on the reader's side.
+  if (/<[a-z][^>]*>/i.test(trimmed)) {
+    return { type: "rawEmbed", attrs: { html: trimmed } };
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
+    // A bare X/Twitter status URL can't sit in an iframe — build the standard
+    // tweet embed so it still works when only the link is pasted.
+    const tweet = trimmed.match(/https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/\S+\/status\/\d+\S*/i);
+    if (tweet) {
+      return {
+        type: "rawEmbed",
+        attrs: {
+          html:
+            `<blockquote class="twitter-tweet"><a href="${tweet[0]}"></a></blockquote>` +
+            `<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`,
+        },
+      };
+    }
+    return { type: "iframeEmbed", attrs: { src: trimmed } };
+  }
+  window.alert("Enter a valid embed URL or embed code.");
+  return null;
 };
 
 /* Floating-toolbar figure, modeled on the Tiptap image-node-pro component:
@@ -703,6 +740,68 @@ const IframeEmbed = Node.create({
   },
 });
 
+/* Raw embeds: any provider's embed markup (X blockquotes, Instagram, TikTok…)
+   is kept verbatim so its script tags can hydrate it on the reader's side.
+   Serialised as <div data-rawembed data-embed-html="base64"> — the attribute
+   carries the markup so story HTML stays well-formed. */
+
+function RawEmbedView({ node, selected }: NodeViewProps) {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!host.current) return;
+    try {
+      injectEmbedHtml(host.current, String(node.attrs.html ?? ""));
+    } catch {}
+  }, [node.attrs.html]);
+  return (
+    <NodeViewWrapper className="raw-embed" data-selected={selected || undefined}>
+      <div ref={host} className="raw-embed-host" contentEditable={false} />
+    </NodeViewWrapper>
+  );
+}
+
+const RawEmbed = Node.create({
+  name: "rawEmbed",
+  group: "block",
+  atom: true,
+  draggable: true,
+
+  addAttributes() {
+    return {
+      html: { default: null, rendered: false },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "div[data-rawembed]",
+        getAttrs: (el) => {
+          try {
+            return { html: decodeEmbedHtml(el.getAttribute("data-embed-html") ?? "") };
+          } catch {
+            return { html: null };
+          }
+        },
+      },
+    ];
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, {
+        "data-rawembed": "",
+        "data-embed-html": encodeEmbedHtml(String(node.attrs.html ?? "")),
+      }),
+    ];
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(RawEmbedView);
+  },
+});
+
 const keep = (event: React.MouseEvent) => event.preventDefault();
 
 function Btn({
@@ -765,6 +864,7 @@ export default function ArticleEditor({
       TableCell,
       ResizableYoutube.configure({ nocookie: true, width: 640, height: 360 }),
       IframeEmbed,
+      RawEmbed,
       FindReplace,
       FlaggedWords,
     ],
@@ -777,8 +877,46 @@ export default function ArticleEditor({
         role: "textbox",
         "aria-multiline": "true",
         "aria-label": "Story body",
+        // Names ("Thirupathy", "Deepathoon") constantly false-positive under
+        // the browser spellcheck; the Writing check panel flags real typos.
+        spellcheck: "false",
         "data-placeholder":
           "Write the story. Most important details first — editors cut from the bottom.",
+      },
+      // Embed markup pasted straight into the body becomes an embed block —
+      // otherwise ProseMirror silently drops the <script> and keeps a dead
+      // blockquote. Copied markup often omits the provider script, so it's
+      // added back for known providers.
+      handlePaste: (view, event) => {
+        const htmlClip = event.clipboardData?.getData("text/html")?.trim() ?? "";
+        const textClip = (event.clipboardData?.getData("text/plain") ?? "").trim();
+        const markup = htmlClip || (/<[a-z][^>]*>/i.test(textClip) ? textClip : "");
+        if (!markup) return false;
+        if (
+          !/<(script|blockquote|iframe|embed|object)\b/i.test(markup) &&
+          !/twitter-tweet|instagram-media|tiktok-embed|fb-post|fb-video/i.test(markup)
+        ) {
+          return false;
+        }
+        const iframe = markup.match(/<iframe[^>]*\bsrc=["']([^"']+)["']/i);
+        let spec: { type: string; attrs: Record<string, unknown> };
+        if (iframe && /^https?:/i.test(iframe[1])) {
+          spec = { type: "iframeEmbed", attrs: { src: iframe[1] } };
+        } else {
+          let html = markup;
+          if (/twitter-tweet/i.test(html) && !/platform\.twitter\.com/i.test(html)) {
+            html +=
+              '<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>';
+          }
+          if (/instagram-media/i.test(html) && !/instagram\.com\/embed\.js/i.test(html)) {
+            html += '<script async src="https://www.instagram.com/embed.js"></script>';
+          }
+          spec = { type: "rawEmbed", attrs: { html } };
+        }
+        const { state } = view;
+        const node = state.schema.nodes[spec.type].create(spec.attrs);
+        view.dispatch(state.tr.replaceSelectionWith(node));
+        return true;
       },
     },
     onUpdate: ({ editor }) => {
@@ -841,8 +979,8 @@ export default function ArticleEditor({
   };
 
   const addEmbed = () => {
-    const src = promptEmbedSrc();
-    if (src) editor?.chain().focus().insertContent({ type: "iframeEmbed", attrs: { src } }).run();
+    const spec = promptEmbed();
+    if (spec) editor?.chain().focus().insertContent(spec).run();
   };
 
   // Find & replace state — recomputed on every render while the bar is open.
@@ -1022,7 +1160,7 @@ export default function ArticleEditor({
             <path d="m10 9.5 5 2.5-5 2.5z" fill="currentColor" />
           </svg>
         </Btn>
-        <Btn title="Embed iframe video" onClick={addEmbed}>
+        <Btn title="Embed URL or any embed code" onClick={addEmbed}>
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
             <path
               d="m8 6-6 6 6 6M16 6l6 6-6 6"

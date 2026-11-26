@@ -772,6 +772,7 @@ main [id] {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
   visibility: hidden;
   pointer-events: none;
 }
@@ -2256,6 +2257,27 @@ a.tag.solid:hover {
 .dash-bar small {
   margin-top: 6px;
   font: 11px var(--font-mono), monospace;
+  color: var(--ink-mute);
+}
+
+.dash-bars a.dash-bar {
+  color: inherit;
+  text-decoration: none;
+}
+
+.dash-bars a.dash-bar:hover i {
+  background: var(--accent-dark);
+}
+
+.dash-bar.sel i {
+  background: var(--ink);
+}
+
+.dash-day-head {
+  margin: 18px 0 12px;
+  font: 600 11px var(--font-mono), monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--ink-mute);
 }
 
@@ -5611,6 +5633,96 @@ a.tag.solid:hover {
   color: var(--live);
 }
 
+.compose-problems {
+  margin: 0 0 16px;
+  padding: 10px 14px 10px 30px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--live);
+  background: var(--surface);
+  font-size: 14px;
+}
+
+.compose-problems li + li {
+  margin-top: 4px;
+}
+
+.compose-check {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px dashed var(--line);
+  background: var(--surface);
+}
+
+.compose-check-head {
+  margin-bottom: 10px;
+  font: 11px var(--font-mono), monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.compose-check-head em {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.compose-check ul {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.compose-check li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.compose-check li em {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.compose-fix {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper);
+  font: 11px var(--font-mono), monospace;
+  cursor: pointer;
+}
+
+.compose-fix:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.publish-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.publish-loader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+}
+
 /* Newsroom CMS */
 
 .cms {
@@ -6291,6 +6403,29 @@ body:has(.cms) {
 
 .editor-area div[data-youtube-video] iframe,
 .story-body div[data-youtube-video] iframe,
+.editor-area [data-rawembed],
+.editor-area .raw-embed,
+.story-body [data-rawembed] {
+  display: flex;
+  justify-content: center;
+  margin: 24px auto;
+  max-width: 560px;
+}
+
+.raw-embed-host {
+  width: 100%;
+}
+
+/* An unhydrated tweet reads as a plain quote until widgets.js upgrades it;
+   keep it out of the editorial blockquote styling. */
+.story-body blockquote.twitter-tweet {
+  margin: 0;
+  padding: 0;
+  border-left: 0;
+  color: inherit;
+  font-style: normal;
+}
+
 .editor-area div[data-embed] iframe,
 .story-body div[data-embed] iframe {
   display: block;

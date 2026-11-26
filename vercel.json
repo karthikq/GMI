@@ -29,6 +29,12 @@
       }
     },
     {
+      "source": "/api/cron/(.*)",
+      "destination": {
+        "service": "news"
+      }
+    },
+    {
       "source": "/api/(.*)",
       "destination": {
         "service": "server"

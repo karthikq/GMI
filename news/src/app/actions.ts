@@ -1,6 +1,7 @@
 "use server";
 
 import { ObjectId } from "mongodb";
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { signIn as naSignIn, signOut as naSignOut } from "@/auth";
 import { getSessionUser } from "@/lib/auth";
@@ -134,17 +135,23 @@ export async function setNewsletter(
 // Picks the reader's preferred email template. Premium formats require a paid
 // plan — the same gate is enforced client-side, but this is the real check.
 export async function chooseEmailFormat(
+  letter: string,
   format: string,
 ): Promise<{ ok: true } | { error: string }> {
   const user = await getSessionUser();
   if (!user) return { error: "Sign in to choose a format." };
+  if (!NEWSLETTERS.some((item) => item.id === letter)) {
+    return { error: "Unknown newsletter." };
+  }
   const found = EMAIL_FORMATS.find((item) => item.id === format);
   if (!found) return { error: "Unknown format." };
   if (found.premium && user.plan !== "premium" && user.plan !== "premium-plus") {
     return { error: "That's a premium format — upgrade your plan to use it." };
   }
   try {
-    return await setSubscriberFormat(user.email, format);
+    const result = await setSubscriberFormat(user.email, letter, format);
+    if ("ok" in result) refresh();
+    return result;
   } catch {
     return { error: "Couldn't save your format. Try again." };
   }

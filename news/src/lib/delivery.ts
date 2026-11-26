@@ -101,7 +101,12 @@ export async function deliverDueNewsletters(now = new Date()): Promise<DeliveryR
       }
       run.due += 1;
       try {
-        const status = await sendNewsletterIssueEmail(sub.email, letter, issueDateLabel(local.date));
+        const status = await sendNewsletterIssueEmail(
+          sub.email,
+          letter,
+          issueDateLabel(local.date),
+          sub.letterFormats?.[id],
+        );
         if (status === "failed") {
           run.failed += 1;
           run.errors.push(`${sub.email}/${id}: provider rejected the send`);
@@ -150,7 +155,12 @@ export async function deliverLetterNow(
   } catch {
     local = localNow(DEFAULT_TZ, now);
   }
-  const status = await sendNewsletterIssueEmail(sub.email, letter, issueDateLabel(local.date));
+  const status = await sendNewsletterIssueEmail(
+    sub.email,
+    letter,
+    issueDateLabel(local.date),
+    sub.letterFormats?.[letterId],
+  );
   if (status !== "failed") {
     await collections.subscribers.updateOne(
       { _id: sub._id },

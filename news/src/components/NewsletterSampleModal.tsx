@@ -81,7 +81,7 @@ export default function NewsletterSampleModal({
     }
     setNote(null);
     startTransition(async () => {
-      const result = await chooseEmailFormat(active.id);
+      const result = await chooseEmailFormat(letter.id, active.id);
       if ("error" in result) {
         setNote({ kind: "error", text: result.error });
         return;

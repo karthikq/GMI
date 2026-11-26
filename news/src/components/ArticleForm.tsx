@@ -10,8 +10,10 @@ import {
   type RelatedPick,
 } from "@/app/actions";
 import ArticleEditor from "@/components/ArticleEditor";
+import EmbedHydrator from "@/components/EmbedHydrator";
 import Modal from "@/components/Modal";
 import { ADULT_WORDS_MESSAGE, findAdultWords, hasAdultWords } from "@/lib/censor";
+import { proofread, type ProofIssue } from "@/lib/proofread";
 import type { EditableArticle, Section } from "@/lib/api";
 import { uploadArticleImage } from "@/lib/image";
 
@@ -358,6 +360,48 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
   // Field errors only render after the first publish attempt, then update live
   // as each field is fixed — same pattern as the banned-words flag below.
   const fieldErrors = attempted ? validate() : {};
+  const problemEntries = Object.entries(fieldErrors) as [FieldName, string][];
+  const issues = proofread({ title, dek, lead, body: stripHtml(blocks.join(" ")) });
+
+  const FIELD_LABELS: Record<FieldName, string> = {
+    title: "Headline",
+    section: "Desk",
+    dek: "Standfirst",
+    author: "Byline",
+    city: "City",
+    lead: "Lead",
+    body: "Story body",
+  };
+
+  const replaceFirst = (text: string, find: string, fix: string) => {
+    const i = text.indexOf(find);
+    return i < 0 ? text : text.slice(0, i) + fix + text.slice(i + find.length);
+  };
+
+  // Replace `find` inside a text node of an HTML block so markup stays intact.
+  const fixInHtml = (html: string, find: string, fix: string): string => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent ?? "";
+      const i = text.indexOf(find);
+      if (i >= 0) {
+        node.textContent = text.slice(0, i) + fix + text.slice(i + find.length);
+        return doc.body.innerHTML;
+      }
+    }
+    return html;
+  };
+
+  const applyFix = (issue: ProofIssue) => {
+    if (!issue.fix) return;
+    const fix = issue.fix;
+    if (issue.key === "title") setTitle((v) => replaceFirst(v, issue.find, fix));
+    else if (issue.key === "dek") setDek((v) => replaceFirst(v, issue.find, fix));
+    else if (issue.key === "lead") setLead((v) => replaceFirst(v, issue.find, fix));
+    else setBlocks((prev) => prev.map((block) => fixInHtml(block, issue.find, fix)));
+  };
 
   const flagNote = (text: string) => {
     const words = flagged ? findAdultWords(text) : [];
@@ -449,6 +493,14 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
           {toast}
         </div>
       )}
+      {pending && (
+        <div className="publish-overlay" role="alert" aria-busy="true">
+          <div className="publish-loader">
+            <span className="spinner" aria-hidden="true" />
+            <p>{busyLabel}</p>
+          </div>
+        </div>
+      )}
       <div className="cms-top">
         <div>
           <p className="kicker">Newsroom</p>
@@ -497,6 +549,15 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
           {error}
         </p>
       )}
+      {error && problemEntries.length > 0 && (
+        <ul className="compose-problems" role="alert">
+          {problemEntries.map(([field, message]) => (
+            <li key={field}>
+              <strong>{FIELD_LABELS[field]}</strong> — {message}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="cms-grid">
         <div className="cms-main">
@@ -510,6 +571,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
               value={title}
               maxLength={200}
               required
+              spellCheck={false}
               placeholder="The story in one line"
               onChange={(event) => {
                 setTitle(event.target.value);
@@ -529,6 +591,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
               maxLength={300}
               rows={2}
               required
+              spellCheck={false}
               placeholder="One or two sentences summarizing the story"
               onChange={(event) => setDek(event.target.value)}
             />
@@ -545,6 +608,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
               maxLength={600}
               rows={4}
               required
+              spellCheck={false}
               placeholder="Who did what, where, when, why and how — the whole story in one paragraph"
               onChange={(event) => setLead(event.target.value)}
             />
@@ -560,6 +624,45 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
             {fieldNote("body", blocks.join(" "))}
             {hint(`${wordCount} words · about ${Math.max(1, Math.round(wordCount / 60))} min to read`)}
           </div>
+
+          {issues.length > 0 && (
+            <section className="compose-check" aria-label="Writing suggestions">
+              <p className="compose-check-head">
+                Writing check{" "}
+                <em>
+                  · {issues.length} suggestion{issues.length === 1 ? "" : "s"}
+                </em>
+              </p>
+              <ul>
+                {issues.slice(0, 12).map((issue, i) => (
+                  <li key={i}>
+                    <span>
+                      <strong>{issue.field}</strong> — {issue.message}: &ldquo;{issue.find}
+                      &rdquo;
+                      {issue.fix && (
+                        <>
+                          {" "}
+                          → <em>{issue.fix}</em>
+                        </>
+                      )}
+                    </span>
+                    {issue.fix && (
+                      <button
+                        type="button"
+                        className="compose-fix"
+                        onClick={() => applyFix(issue)}
+                      >
+                        Fix
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {issues.length > 12 && (
+                <small className="compose-hint">…and {issues.length - 12} more.</small>
+              )}
+            </section>
+          )}
         </div>
 
         <aside className="cms-side">
@@ -966,6 +1069,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
                 </figure>
               )}
               <div className="story-body">
+                <EmbedHydrator />
                 {previewBody.map((block, index) => (
                   <div key={index} dangerouslySetInnerHTML={{ __html: block }} />
                 ))}

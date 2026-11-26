@@ -859,22 +859,30 @@ export async function setNewsletterSubscription(
   return { ok: true, added: on && (result.upsertedCount > 0 || result.modifiedCount > 0) };
 }
 
-// The email format an address last picked on /newsletters, if any.
-export async function fetchSubscriberFormat(emailField: unknown): Promise<string | undefined> {
+// The email formats an address picked on /newsletters, keyed by newsletter id.
+export async function fetchSubscriberFormats(emailField: unknown): Promise<Record<string, string>> {
   await connect();
   await io();
   const email = String(emailField || "").trim().toLowerCase();
-  if (!email) return undefined;
-  const doc = await collections.subscribers.findOne({ email }, { projection: { format: 1 } });
-  return typeof doc?.format === "string" && EMAIL_FORMATS.some((f) => f.id === doc.format)
-    ? doc.format
-    : undefined;
+  if (!email) return {};
+  const doc = await collections.subscribers.findOne(
+    { email },
+    { projection: { letterFormats: 1 } },
+  );
+  return Object.fromEntries(
+    Object.entries(doc?.letterFormats ?? {}).filter(
+      ([id, fmt]) =>
+        NEWSLETTERS.some((item) => item.id === id) &&
+        EMAIL_FORMATS.some((f) => f.id === fmt),
+    ),
+  );
 }
 
-// Stores the address' chosen email format. Entitlement is checked by the
-// caller (server action) against the reader's plan.
+// Stores one newsletter's email format. Entitlement is checked by the caller
+// (server action) against the reader's plan.
 export async function setSubscriberFormat(
   emailField: unknown,
+  letter: string,
   format: string,
 ): Promise<{ ok: true } | { error: string }> {
   await connect();
@@ -882,12 +890,18 @@ export async function setSubscriberFormat(
   if (!VALID_EMAIL.test(email)) {
     return { error: "Enter a valid email address." };
   }
+  if (!NEWSLETTERS.some((item) => item.id === letter)) {
+    return { error: "Unknown newsletter." };
+  }
   if (!EMAIL_FORMATS.some((item) => item.id === format)) {
     return { error: "Unknown format." };
   }
   await collections.subscribers.updateOne(
     { email },
-    { $set: { format }, $setOnInsert: { email, subscribedAt: new Date() } },
+    {
+      $set: { [`letterFormats.${letter}`]: format },
+      $setOnInsert: { email, subscribedAt: new Date() },
+    },
     { upsert: true },
   );
   return { ok: true };
@@ -968,6 +982,7 @@ export type AdminLetterStatus = {
   name: string;
   cadence: string;
   time?: string;
+  formatName: string;
   // "pending" means no issue was ever recorded for this reader/letter pair;
   // "confirmed" means the subscribe email went out but no issue has yet.
   status: "sent" | "skipped" | "failed" | "confirmed" | "pending";
@@ -978,7 +993,6 @@ export type AdminSubscriber = {
   email: string;
   name?: string;
   subscribedAt?: string;
-  format?: string;
   letters: AdminLetterStatus[];
 };
 
@@ -1013,7 +1027,6 @@ export async function fetchSubscriberDashboard(): Promise<AdminSubscriber[]> {
     email: sub.email,
     name: names.get(sub.email),
     subscribedAt: sub.subscribedAt?.toISOString(),
-    format: EMAIL_FORMATS.find((item) => item.id === sub.format)?.name ?? sub.format,
     letters: (Array.isArray(sub.letters) ? sub.letters : [])
       .filter((id): id is string => typeof id === "string")
       .map((id) => {
@@ -1030,11 +1043,13 @@ export async function fetchSubscriberDashboard(): Promise<AdminSubscriber[]> {
             : latest.has(`${key} confirm`)
               ? "confirmed"
               : "pending";
+        const fmtId = sub.letterFormats?.[id];
         return {
           id,
           name: letter?.name ?? id,
           cadence: letter?.cadence ?? "",
           ...(sub.letterTimes?.[id] ? { time: sub.letterTimes[id] } : {}),
+          formatName: EMAIL_FORMATS.find((item) => item.id === fmtId)?.name ?? EMAIL_FORMATS[0].name,
           status,
           ...(issue
             ? { sentAt: issue.sentAt.toISOString() }
@@ -1043,5 +1058,81 @@ export async function fetchSubscriberDashboard(): Promise<AdminSubscriber[]> {
               : {}),
         };
       }),
+  }));
+}
+
+export type DeliveryDay = {
+  date: string; // "YYYY-MM-DD", UTC
+  label: string; // "11/24"
+  sent: number;
+  failed: number;
+  skipped: number;
+};
+
+// Per-day newsletter email counts for the admin dashboard. Days with no sends
+// still get a row so the chart shows the full window.
+export async function fetchDailyDeliveries(days = 14): Promise<DeliveryDay[]> {
+  await connect();
+  await io();
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const since = new Date(today.getTime() - (days - 1) * 86_400_000);
+  const rows = await collections.deliveries
+    .aggregate<{ _id: string; sent: number; failed: number; skipped: number }>([
+      { $match: { sentAt: { $gte: since } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$sentAt" } },
+          sent: { $sum: { $cond: [{ $eq: ["$status", "sent"] }, 1, 0] } },
+          failed: { $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] } },
+          skipped: { $sum: { $cond: [{ $eq: ["$status", "skipped"] }, 1, 0] } },
+        },
+      },
+    ])
+    .toArray();
+  const byDate = new Map(rows.map((row) => [row._id, row]));
+  const out: DeliveryDay[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = new Date(today.getTime() - i * 86_400_000);
+    const date = day.toISOString().slice(0, 10);
+    const row = byDate.get(date);
+    out.push({
+      date,
+      label: `${String(day.getUTCMonth() + 1).padStart(2, "0")}/${String(day.getUTCDate()).padStart(2, "0")}`,
+      sent: row?.sent ?? 0,
+      failed: row?.failed ?? 0,
+      skipped: row?.skipped ?? 0,
+    });
+  }
+  return out;
+}
+
+export type DeliveryRow = {
+  email: string;
+  letter: string;
+  kind: "confirm" | "issue";
+  status: "sent" | "skipped" | "failed";
+  sentAt: string;
+};
+
+// Every delivery attempt logged on one UTC date ("YYYY-MM-DD") — the per-day
+// drill-down under the "Emails sent" chart on the admin dashboard.
+export async function fetchDeliveriesForDay(date: string): Promise<DeliveryRow[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+  await connect();
+  await io();
+  const start = new Date(`${date}T00:00:00.000Z`);
+  const end = new Date(start.getTime() + 86_400_000);
+  const rows = await collections.deliveries
+    .find({ sentAt: { $gte: start, $lt: end } })
+    .sort({ sentAt: -1 })
+    .limit(500)
+    .toArray();
+  return rows.map((row) => ({
+    email: row.email,
+    letter: NEWSLETTERS.find((item) => item.id === row.letter)?.name ?? row.letter,
+    kind: row.kind,
+    status: row.status,
+    sentAt: row.sentAt.toISOString(),
   }));
 }

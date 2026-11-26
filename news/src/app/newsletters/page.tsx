@@ -5,19 +5,19 @@ import NewsletterCard from "@/components/NewsletterCard";
 import { PageSkeleton } from "@/components/States";
 import { getSessionUser } from "@/lib/auth";
 import { DESK_NEWSLETTERS, FLAGSHIP_NEWSLETTERS } from "@/lib/newsletters";
-import { fetchSubscriberFormat, fetchSubscriberLetters, fetchSubscriberTimes } from "@/lib/queries";
+import { fetchSubscriberFormats, fetchSubscriberLetters, fetchSubscriberTimes } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Newsletters" };
 
 async function Letters() {
   const user = await getSessionUser();
-  const [letterIds, format, times] = user
+  const [letterIds, formats, times] = user
     ? await Promise.all([
         fetchSubscriberLetters(user.email),
-        fetchSubscriberFormat(user.email),
+        fetchSubscriberFormats(user.email),
         fetchSubscriberTimes(user.email),
       ])
-    : [[], undefined, {} as Record<string, string>];
+    : [[], {} as Record<string, string>, {} as Record<string, string>];
   const subscribed = new Set(letterIds);
   const premium = user?.plan === "premium" || user?.plan === "premium-plus";
   const card = (letter: (typeof FLAGSHIP_NEWSLETTERS)[number]) => (
@@ -27,7 +27,7 @@ async function Letters() {
       subscribed={subscribed.has(letter.id)}
       signedIn={Boolean(user)}
       premium={premium}
-      initialFormat={format}
+      initialFormat={formats[letter.id]}
       initialTime={times[letter.id]}
     />
   );

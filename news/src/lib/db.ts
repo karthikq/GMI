@@ -10,12 +10,13 @@ export const client = (globalForMongo.mongoClient ??= new MongoClient(
 ));
 export const db = client.db(process.env.MONGODB_DB || "meridian");
 
-// Older documents may predate `letters`/`format`; readers guard accordingly.
+// Older documents may predate `letters`; readers guard accordingly.
 export type SubscriberDoc = {
   email: string;
   subscribedAt: Date;
   letters: string[];
-  format?: string;
+  // Per-letter email format picks, keyed by letter id.
+  letterFormats?: Record<string, string>;
   // Per-letter delivery time overrides the reader picked, keyed by letter id.
   letterTimes?: Record<string, string>;
   // Last local date (YYYY-MM-DD) each letter was delivered — dedupes the cron run.
