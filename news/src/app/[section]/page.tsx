@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import SectionListing from "@/components/SectionListing";
-import { CATEGORY_PAGE_SIZE } from "@/components/SubsectionPage";
 import { Offline, PageSkeleton } from "@/components/States";
-import { getCategoryArticles, getSectionTree } from "@/lib/api";
+import { getSavedSlugs, getSectionBundle, getSectionTree } from "@/lib/api";
+import { getSessionUser } from "@/lib/auth";
 
 type Props = {
   params: Promise<{ section: string }>;
@@ -36,26 +36,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 async function SectionContent({ params, searchParams }: Props) {
   const [{ section: slug }, { page: raw }] = await Promise.all([params, searchParams]);
   const page = Math.max(1, parseInt(raw ?? "1", 10) || 1);
-  const [tree, result] = await Promise.all([
+  const [tree, bundle, user] = await Promise.all([
     getSectionTree(),
-    getCategoryArticles({
-      sectionSlug: slug,
-      limit: CATEGORY_PAGE_SIZE,
-      offset: (page - 1) * CATEGORY_PAGE_SIZE,
-    }),
+    getSectionBundle({ sectionSlug: slug, page }),
+    getSessionUser(),
   ]);
   if (!tree) return <Offline />;
   const section = tree.find((item) => item.slug === slug);
   if (!section) notFound();
-  if (!result) return <Offline />;
+  if (!bundle) return <Offline />;
+  const slugs = [
+    ...bundle.blocks.flatMap((block) => block.articles.map((article) => article.slug)),
+    ...(bundle.feed?.articles.map((article) => article.slug) ?? []),
+  ];
+  const saved = user ? await getSavedSlugs(user.id, slugs) : null;
   return (
     <SectionListing
       section={section}
       items={section.children ?? []}
-      articles={result.articles}
-      total={result.total}
+      bundle={bundle}
       page={page}
-      perPage={CATEGORY_PAGE_SIZE}
+      signedIn={Boolean(user)}
+      savedSlugs={new Set(saved ?? [])}
     />
   );
 }

@@ -5,6 +5,13 @@ import { ADULT_WORDS_MESSAGE, hasAdultWords } from "./censor";
 import { isHostedImage, uploadImage } from "./cloudinary";
 import { collections, connect, type CategoryDoc } from "./db";
 import { COMMODITIES, MARKET_RANGES, MARKET_SYMBOLS, marketSlug, type MarketRange } from "./markets";
+import {
+  defaultSectionConfig,
+  FEED_PAGE_SIZE,
+  type CollectionsConfig,
+  type LayoutBlock,
+  type SectionLayoutConfig,
+} from "./layouts";
 import { EMAIL_FORMATS, NEWSLETTERS } from "./newsletters";
 
 type StoredArticle = {
@@ -34,6 +41,13 @@ type StoredArticle = {
   tickerOrder?: number;
   authorId?: string;
   views?: number;
+  // Editorial flags read by the layout blocks: `featured` pins a story into
+  // "featured"-source blocks, `premium`/`exclusive` feed premium collections,
+  // `photoCount` decorates visual cards when a story is a gallery.
+  featured?: boolean;
+  premium?: boolean;
+  exclusive?: boolean;
+  photoCount?: number;
 };
 
 const HOUR = 60 * 60 * 1000;
@@ -284,6 +298,9 @@ function present(
     readMinutes: article.readMinutes,
     reads: article.reads,
     status: article.publishedAt.getTime() > Date.now() ? "scheduled" : "published",
+    ...(article.featured ? { featured: true } : {}),
+    ...(article.premium || article.exclusive ? { premium: true } : {}),
+    ...(article.photoCount ? { photoCount: article.photoCount } : {}),
     ...(full
       ? {
           body: article.lead ? [`<p>${escapeHtml(article.lead)}</p>`, ...article.body] : article.body,
@@ -440,9 +457,41 @@ export async function fetchCategoryPath(
   };
 }
 
+// The Mongo filter matching stories filed under a category — a section
+// covers its own stories plus every child's, a subsection only its own.
+// Matches the id fields written by the editor as well as the plain `section`
+// slug on older stories.
+async function categoryFilter(
+  parent: CategoryDoc,
+  child?: CategoryDoc,
+): Promise<Record<string, unknown>> {
+  if (child) {
+    return {
+      ...PUBLISHED(),
+      $or: [
+        { subsectionId: child._id },
+        { subsection: child.slug, subsectionId: { $exists: false } },
+        // Stories filed before subsection ids existed may carry the child
+        // slug in the legacy `section` field.
+        { section: child.slug, sectionId: { $exists: false } },
+      ],
+    };
+  }
+  const children = await collections.sections
+    .find({ parent: parent._id }, { projection: { slug: 1 } })
+    .toArray();
+  return {
+    ...PUBLISHED(),
+    $or: [
+      { sectionId: parent._id },
+      { subsectionId: { $in: children.map((doc) => doc._id) } },
+      { section: { $in: [parent.slug, ...children.map((doc) => doc.slug)] }, sectionId: { $exists: false } },
+    ],
+  };
+}
+
 // Published stories for a section (its own plus every subsection's) or one
-// subsection. Matches the category id fields written by the editor as well
-// as the plain `section` slug on older stories.
+// subsection.
 export async function fetchCategoryArticles(params: {
   sectionSlug: string;
   subsectionSlug?: string;
@@ -456,32 +505,7 @@ export async function fetchCategoryArticles(params: {
   const { parent, child } = resolved;
   const limit = Math.min(params.limit || 25, 50);
   const offset = Math.max(params.offset || 0, 0);
-
-  let filter: Record<string, unknown>;
-  if (child) {
-    filter = {
-      ...PUBLISHED(),
-      $or: [
-        { subsectionId: child._id },
-        { subsection: child.slug, subsectionId: { $exists: false } },
-        // Stories filed before subsection ids existed may carry the child
-        // slug in the legacy `section` field.
-        { section: child.slug, sectionId: { $exists: false } },
-      ],
-    };
-  } else {
-    const children = await collections.sections
-      .find({ parent: parent._id }, { projection: { slug: 1 } })
-      .toArray();
-    filter = {
-      ...PUBLISHED(),
-      $or: [
-        { sectionId: parent._id },
-        { subsectionId: { $in: children.map((doc) => doc._id) } },
-        { section: { $in: [parent.slug, ...children.map((doc) => doc.slug)] }, sectionId: { $exists: false } },
-      ],
-    };
-  }
+  const filter = await categoryFilter(parent, child);
 
   const [maps, total, found] = await Promise.all([
     categoryMaps(),
@@ -1589,4 +1613,319 @@ export async function fetchDeliveriesForDay(date: string): Promise<DeliveryRow[]
     status: row.status,
     sentAt: row.sentAt.toISOString(),
   }));
+}
+
+// ── Editorial layouts ──────────────────────────────────────────────────────
+// Section/subsection pages are assembled from a `layouts` document: ordered
+// content blocks resolved against one pooled article query, plus
+// auto-generated collections for featured subsections.
+
+const LAYOUT_POOL_LIMIT = 150;
+
+const layoutDocs = () => collections.layouts;
+
+export async function fetchLayoutConfig(
+  sectionSlug: string,
+  subsectionSlug?: string,
+): Promise<SectionLayoutConfig | null> {
+  await connect();
+  await io();
+  // Subsection overrides win, then the section's own program, else defaults.
+  if (subsectionSlug) {
+    const own = await layoutDocs().findOne({ sectionSlug, subsectionSlug });
+    if (own) {
+      return { sectionSlug, subsectionSlug, blocks: own.blocks, collections: own.collections };
+    }
+  }
+  const doc = await layoutDocs().findOne({ sectionSlug, subsectionSlug: null });
+  if (doc) {
+    return {
+      sectionSlug,
+      ...(subsectionSlug ? { subsectionSlug } : {}),
+      blocks: doc.blocks,
+      collections: doc.collections,
+    };
+  }
+  const config = defaultSectionConfig(sectionSlug, sectionSlug);
+  if (subsectionSlug) config.subsectionSlug = subsectionSlug;
+  return config;
+}
+
+// Every stored config keyed "section" or "section/subsection" — the admin
+// editor merges this over the stock defaults.
+export async function fetchLayoutDocs(): Promise<Record<string, SectionLayoutConfig>> {
+  await connect();
+  await io();
+  const docs = await layoutDocs().find({}).toArray();
+  const out: Record<string, SectionLayoutConfig> = {};
+  for (const doc of docs) {
+    const key = doc.subsectionSlug ? `${doc.sectionSlug}/${doc.subsectionSlug}` : doc.sectionSlug;
+    out[key] = {
+      sectionSlug: doc.sectionSlug,
+      ...(doc.subsectionSlug ? { subsectionSlug: doc.subsectionSlug } : {}),
+      blocks: doc.blocks,
+      collections: doc.collections,
+    };
+  }
+  return out;
+}
+
+// The stored document for the admin editor — null means "on defaults".
+export async function fetchLayoutDoc(
+  sectionSlug: string,
+  subsectionSlug?: string,
+): Promise<SectionLayoutConfig | null> {
+  await connect();
+  await io();
+  const doc = await layoutDocs().findOne({ sectionSlug, subsectionSlug: subsectionSlug ?? null });
+  if (!doc) return null;
+  return {
+    sectionSlug,
+    ...(doc.subsectionSlug ? { subsectionSlug: doc.subsectionSlug } : {}),
+    blocks: doc.blocks,
+    collections: doc.collections,
+  };
+}
+
+// Upserts a validated block program for a section or subsection.
+export async function saveLayoutConfig(
+  sectionSlug: string,
+  subsectionSlug: string | null,
+  input: { blocks: LayoutBlock[]; collections: CollectionsConfig },
+): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  const parent = await collections.sections.findOne({ parent: null, slug: sectionSlug });
+  if (!parent) return { error: "Unknown section." };
+  if (subsectionSlug) {
+    const child = await collections.sections.findOne({ parent: parent._id, slug: subsectionSlug });
+    if (!child) return { error: "Unknown subsection." };
+  }
+  await layoutDocs().updateOne(
+    { sectionSlug, subsectionSlug },
+    {
+      $set: {
+        sectionSlug,
+        subsectionSlug,
+        blocks: input.blocks,
+        collections: input.collections,
+        updatedAt: new Date(),
+      },
+      $setOnInsert: { createdAt: new Date() },
+    },
+    { upsert: true },
+  );
+  return { ok: true };
+}
+
+// Deletes a stored config so the section falls back to the stock program.
+export async function resetLayoutConfig(
+  sectionSlug: string,
+  subsectionSlug: string | null,
+): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  await layoutDocs().deleteOne({ sectionSlug, subsectionSlug });
+  return { ok: true };
+}
+
+// Slugs the signed-in reader has bookmarked — one lookup for the whole page.
+export async function fetchSavedSlugs(userId: string, slugs: string[]): Promise<string[]> {
+  if (!slugs.length) return [];
+  await connect();
+  await io();
+  const rows = await collections.bookmarks
+    .find({ userId, slug: { $in: slugs } }, { projection: { slug: 1 } })
+    .toArray();
+  return rows.map((row) => row.slug as string);
+}
+
+export type ResolvedBlock = {
+  block: LayoutBlock;
+  articles: Article[];
+  // Set on generated subsection collections — the "View all" target.
+  viewAll?: string;
+  // Marks blocks generated from the collections config (not editable rows).
+  collection?: boolean;
+};
+
+export type SectionBundle = {
+  section: Section;
+  subsection?: Section;
+  config: SectionLayoutConfig;
+  // Ordered non-feed blocks (subsection collections already merged in).
+  blocks: ResolvedBlock[];
+  // The "all"-source block paginated by ?page= — the archive feed.
+  feed: { block: LayoutBlock; articles: Article[]; total: number } | null;
+};
+
+// Resolves a whole section/subsection page in two Mongo queries: one pooled
+// list of the newest stories (blocks pick from it in-process, deduplicated)
+// plus the paginated archive slice behind the "all" feed.
+export async function fetchSectionBundle(params: {
+  sectionSlug: string;
+  subsectionSlug?: string;
+  page?: number;
+  // Optional program to resolve instead of the stored one — the admin
+  // editor uses it to preview unsaved drafts.
+  config?: SectionLayoutConfig;
+}): Promise<SectionBundle | null> {
+  await connect();
+  await io();
+  const resolved = await resolveCategoryPath(params.sectionSlug, params.subsectionSlug);
+  if (!resolved) return null;
+  const { parent, child } = resolved;
+
+  const [stored, filter, maps, children] = await Promise.all([
+    params.config ? Promise.resolve(null) : fetchLayoutConfig(parent.slug, child?.slug),
+    categoryFilter(parent, child),
+    categoryMaps(),
+    collections.sections
+      .find({ parent: parent._id, active: { $ne: false } }, { projection: { featured: 1, order: 1 } })
+      .sort({ order: 1 })
+      .toArray() as Promise<CategoryDoc[]>,
+  ]);
+  const config = params.config ?? stored;
+  if (!config) return null;
+
+  const page = Math.max(1, params.page || 1);
+  const feedBlock = config.blocks.find((block) => block.enabled && block.source === "all");
+  const perPage = feedBlock?.articleCount ?? FEED_PAGE_SIZE;
+
+  const manualSlugs = config.blocks.flatMap((block) => block.selectedArticles ?? []);
+
+  const [poolDocs, manualDocs, feedTotal, feedDocs] = await Promise.all([
+    collections.articles.find(filter, LIST).sort({ publishedAt: -1 }).limit(LAYOUT_POOL_LIMIT).toArray(),
+    manualSlugs.length
+      ? collections.articles.find({ ...PUBLISHED(), slug: { $in: manualSlugs } }, LIST).toArray()
+      : Promise.resolve([]),
+    feedBlock ? collections.articles.countDocuments(filter) : Promise.resolve(0),
+    feedBlock
+      ? collections.articles
+          .find(filter, LIST)
+          .sort({ publishedAt: -1 })
+          .skip((page - 1) * perPage)
+          .limit(perPage)
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+
+  const pool = poolDocs as unknown as StoredArticle[];
+  const manualBySlug = new Map(
+    (manualDocs as unknown as StoredArticle[]).map((article) => [article.slug, article]),
+  );
+  const presentDocs = (docs: StoredArticle[]) => docs.map((doc) => present(doc, maps));
+
+  // A story belongs to a subsection by id, or — for stories written before
+  // ids existed — by matching slug under the right parent.
+  const matchesSub = (article: StoredArticle, sub: CategoryDoc) =>
+    String(article.subsectionId ?? "") === String(sub._id) ||
+    (!article.subsectionId && article.subsection === sub.slug) ||
+    (!article.subsectionId && !article.subsection && article.section === sub.slug);
+
+  const used = new Set<string>();
+  const take = (candidates: StoredArticle[], count: number) => {
+    const picked = candidates.filter((article) => !used.has(article.slug)).slice(0, count);
+    picked.forEach((article) => used.add(article.slug));
+    return picked;
+  };
+
+  const orderFor = (block: LayoutBlock, candidates: StoredArticle[]) => {
+    if (block.sort === "oldest") {
+      return [...candidates].sort((a, b) => a.publishedAt.getTime() - b.publishedAt.getTime());
+    }
+    if (block.sort === "most-read" || block.source === "most-read") {
+      return [...candidates].sort((a, b) => b.reads - a.reads);
+    }
+    return candidates;
+  };
+
+  const resolveBlock = (block: LayoutBlock): StoredArticle[] => {
+    let candidates = orderFor(block, pool);
+    if (block.timeRangeDays) {
+      const since = Date.now() - block.timeRangeDays * 24 * HOUR;
+      candidates = candidates.filter((article) => article.publishedAt.getTime() >= since);
+    }
+    switch (block.source) {
+      case "manual":
+        return (block.selectedArticles ?? [])
+          .map((slug) => manualBySlug.get(slug))
+          .filter((article): article is StoredArticle => Boolean(article));
+      case "featured": {
+        const picked = (block.selectedArticles ?? [])
+          .map((slug) => manualBySlug.get(slug))
+          .filter((article): article is StoredArticle => Boolean(article));
+        const flagged = candidates.filter((article) => article.featured || article.breaking);
+        const rest = candidates.filter((article) => !article.featured && !article.breaking);
+        return [...picked, ...flagged, ...rest];
+      }
+      case "subsection": {
+        const sub = children.find((doc) => doc.slug === block.subsectionSlug);
+        if (!sub) return [];
+        return candidates.filter((article) => matchesSub(article, sub));
+      }
+      case "premium":
+        return candidates.filter((article) => article.premium || article.exclusive);
+      default:
+        return candidates;
+    }
+  };
+
+  const blocks: ResolvedBlock[] = [];
+  for (const block of [...config.blocks].sort((a, b) => a.displayOrder - b.displayOrder)) {
+    if (!block.enabled || block.source === "all") continue;
+    // On a subsection page the pool is already scoped; subsection blocks
+    // only make sense when they name the subsection being viewed.
+    if (child && block.source === "subsection" && block.subsectionSlug !== child.slug) continue;
+    const articles = presentDocs(take(resolveBlock(block), block.articleCount));
+    if (articles.length) blocks.push({ block, articles });
+  }
+
+  // Generated collections: featured subsections first, each with its own
+  // block — skipped entirely on subsection pages (no children to collect).
+  if (!child && config.collections.enabled) {
+    const subs = [...children]
+      .sort(
+        (a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || (a.order ?? 0) - (b.order ?? 0),
+      )
+      .slice(0, config.collections.max);
+    for (const sub of subs) {
+      const articles = presentDocs(
+        take(pool.filter((article) => matchesSub(article, sub)), config.collections.articleCount),
+      );
+      if (!articles.length) continue;
+      blocks.push({
+        block: {
+          id: `collection-${sub.slug}`,
+          title: sub.name,
+          layout: config.collections.layout,
+          source: "subsection",
+          subsectionSlug: sub.slug,
+          articleCount: config.collections.articleCount,
+          displayOrder: config.collections.displayOrder,
+          enabled: true,
+        },
+        articles,
+        viewAll: `/${parent.slug}/${sub.slug}`,
+        collection: true,
+      });
+    }
+  }
+
+  blocks.sort((a, b) => a.block.displayOrder - b.block.displayOrder);
+
+  let feedTitle = feedBlock?.title ?? "All Articles";
+  if (child && /^all .+ news$/i.test(feedTitle)) feedTitle = `All ${child.name} News`;
+
+  return {
+    section: toSection(parent),
+    ...(child ? { subsection: toSection(child, parent) } : {}),
+    config,
+    blocks,
+    feed: feedBlock
+      ? {
+          block: { ...feedBlock, title: feedTitle },
+          articles: presentDocs(feedDocs as unknown as StoredArticle[]),
+          total: feedTotal,
+        }
+      : null,
+  };
 }
