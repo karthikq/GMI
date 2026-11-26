@@ -13,10 +13,17 @@ export const collections = {
 export async function connect() {
   await client.connect();
   const { sections, articles, subscribers } = collections;
+  // The original global unique slug index predates subsections — two
+  // different sections may now own a child with the same slug, so
+  // uniqueness is enforced per parent instead.
+  await sections.dropIndex("slug_1").catch(() => {});
   await Promise.all([
-    sections.createIndex({ slug: 1 }, { unique: true }),
+    sections.createIndex({ parent: 1, slug: 1 }, { unique: true }),
+    sections.createIndex({ parent: 1, order: 1 }),
     articles.createIndex({ slug: 1 }, { unique: true }),
     articles.createIndex({ section: 1, publishedAt: -1 }),
+    articles.createIndex({ sectionId: 1, publishedAt: -1 }),
+    articles.createIndex({ subsectionId: 1, publishedAt: -1 }),
     articles.createIndex({ publishedAt: -1 }),
     articles.createIndex({ reads: -1 }),
     subscribers.createIndex({ email: 1 }, { unique: true }),

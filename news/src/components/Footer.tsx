@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { getSections } from "@/lib/api";
+import { getNavSections } from "@/lib/api";
 import SubscribeForm from "./SubscribeForm";
 
 async function FooterSections() {
-  const sections = await getSections();
+  const sections = await getNavSections();
   return (
     <ul className="footer-links two">
       {(sections ?? []).map((section) => (
         <li key={section.slug}>
-          <Link href={`/section/${section.slug}`}>{section.name}</Link>
+          <Link href={`/${section.slug}`}>{section.name}</Link>
         </li>
       ))}
     </ul>

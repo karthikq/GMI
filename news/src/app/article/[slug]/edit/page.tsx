@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import ArticleForm from "@/components/ArticleForm";
 import { PageSkeleton } from "@/components/States";
-import { getEditableArticle, getSections } from "@/lib/api";
+import { getEditableArticle, getSectionTree } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { isEditorial } from "@/lib/roles";
 
@@ -17,7 +17,7 @@ async function EditContent({ params }: Props) {
   if (!user) redirect("/signin");
   if (!isEditorial(user.role)) notFound();
   // Only the author gets a result here; anyone else sees the not-found page.
-  const [article, sections] = await Promise.all([getEditableArticle(slug, user.id), getSections()]);
+  const [article, sections] = await Promise.all([getEditableArticle(slug, user.id), getSectionTree()]);
   if (!article) notFound();
   return <ArticleForm sections={sections ?? []} initial={article} />;
 }

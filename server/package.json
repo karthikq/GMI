@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
-    "seed": "node --env-file-if-exists=.env src/seed.js"
+    "seed": "node --env-file-if-exists=.env src/seed.js",
+    "seed:categories": "node --env-file-if-exists=.env src/seed-categories.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

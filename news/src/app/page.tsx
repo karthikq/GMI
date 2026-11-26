@@ -43,7 +43,7 @@ async function HomeContent() {
           {briefs.map((article) => (
             <ArticleCard key={article.slug} article={article} variant="brief" />
           ))}
-          <Link href="/section/world" className="more">
+          <Link href="/world" className="more">
             All world stories →
           </Link>
         </aside>
@@ -52,7 +52,7 @@ async function HomeContent() {
           <Link href={`/article/${lead.slug}`} className="card-image" tabIndex={-1} aria-hidden="true">
             <ArticleImage article={lead} />
           </Link>
-          <Link href={`/section/${lead.section}`} className="kicker">
+          <Link href={`/${lead.section}`} className="kicker">
             {lead.sectionName} · {lead.city}
           </Link>
           <h1>
@@ -67,7 +67,7 @@ async function HomeContent() {
           {topFeature && <ArticleCard article={topFeature} />}
           {topRest.map((article) => (
             <article key={article.slug} className="brief">
-              <Link href={`/section/${article.section}`} className="kicker">
+              <Link href={`/${article.section}`} className="kicker">
                 {article.sectionName}
               </Link>
               <h3>
@@ -103,7 +103,7 @@ async function HomeContent() {
             <section key={section.slug} id={section.slug} className="desk">
               <div className="section-head">
                 <h2>{section.name}</h2>
-                <Link href={`/section/${section.slug}`} className="more">
+                <Link href={`/${section.slug}`} className="more">
                   More {section.name.toLowerCase()} →
                 </Link>
               </div>
@@ -201,7 +201,7 @@ async function HomeContent() {
         <section id="opinion" className="band dark">
           <div className="section-head">
             <h2>Opinion &amp; ideas</h2>
-            <Link href="/section/opinion" className="more">
+            <Link href="/opinion" className="more">
               All columns →
             </Link>
           </div>
@@ -238,7 +238,7 @@ async function HomeContent() {
         <section id="in-pictures" className="section-block">
           <div className="section-head">
             <h2>In pictures</h2>
-            <Link href="/section/in-pictures" className="more">
+            <Link href="/in-pictures" className="more">
               Photo desk →
             </Link>
           </div>

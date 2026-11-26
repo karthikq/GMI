@@ -1,14 +1,20 @@
+import { ObjectId } from "mongodb";
 import { io } from "next/cache";
-import type { Article, Edition, EditableArticle, HomeData, Market, MarketDetail, MarketView, Section, TickerItem, Weather } from "./api";
+import type { Article, CategoryPage, Edition, EditableArticle, HomeData, Market, MarketDetail, MarketView, Section, TickerItem, Weather } from "./api";
 import { ADULT_WORDS_MESSAGE, hasAdultWords } from "./censor";
 import { isHostedImage, uploadImage } from "./cloudinary";
-import { collections, connect } from "./db";
+import { collections, connect, type CategoryDoc } from "./db";
 import { COMMODITIES, MARKET_RANGES, MARKET_SYMBOLS, marketSlug, type MarketRange } from "./markets";
 import { EMAIL_FORMATS, NEWSLETTERS } from "./newsletters";
 
 type StoredArticle = {
   slug: string;
   section: string;
+  // Category ids are stored alongside the section slug so subsection pages
+  // can filter without a join; older stories only carry `section`.
+  sectionId?: ObjectId;
+  subsection?: string;
+  subsectionId?: ObjectId;
   title: string;
   dek: string;
   author: string;
@@ -58,7 +64,11 @@ const ROLES: Record<string, string> = {
   longform: "Senior writer",
 };
 
-const getSectionDocs = () => collections.sections.find({}, HIDDEN).sort({ order: 1 }).toArray();
+// Top-level categories only — subsections carry a parent id, while documents
+// written before subsections existed simply lack the field.
+const getSectionDocs = () => collections.sections.find({ parent: null }, HIDDEN).sort({ order: 1 }).toArray();
+const getCategoryDocs = () =>
+  collections.sections.find({}).sort({ order: 1 }).toArray() as Promise<CategoryDoc[]>;
 const getMarketDocs = () => collections.markets.find({}, HIDDEN).sort({ order: 1 }).toArray();
 
 type Point = { t: number; c: number };
@@ -188,6 +198,36 @@ export async function fetchMarketDetail(slug: string, range: MarketRange): Promi
 
 const sectionNames = async () => new Map((await getSectionDocs()).map((s) => [s.slug, s.name]));
 
+// Lookup tables shared by article presentation: slug→name for main sections
+// and category-id→{slug,name} for subsections.
+type CategoryMaps = {
+  names: Map<string, string>;
+  subs: Map<string, { slug: string; name: string }>;
+};
+const categoryMaps = async (): Promise<CategoryMaps> => {
+  const docs = await getCategoryDocs();
+  const maps: CategoryMaps = { names: new Map(), subs: new Map() };
+  for (const doc of docs) {
+    if (doc.parent) maps.subs.set(String(doc._id), { slug: doc.slug, name: doc.name });
+    else maps.names.set(doc.slug, doc.name);
+  }
+  return maps;
+};
+
+const toSection = (doc: CategoryDoc, parent?: CategoryDoc): Section => ({
+  id: String(doc._id),
+  slug: doc.slug,
+  name: doc.name,
+  blurb: doc.blurb ?? "",
+  ...(parent ? { parentId: String(parent._id), parentSlug: parent.slug } : {}),
+  order: doc.order ?? 0,
+  active: doc.active !== false,
+  showInNav: doc.showInNav !== false,
+  featured: Boolean(doc.featured),
+  ...(doc.seoTitle ? { seoTitle: doc.seoTitle } : {}),
+  ...(doc.seoDescription ? { seoDescription: doc.seoDescription } : {}),
+});
+
 // Extra fields only the article page needs.
 function details(article: StoredArticle, sectionName: string) {
   const role = ROLES[article.section] ?? "Staff writer";
@@ -217,11 +257,12 @@ const API_URL =
 
 function present(
   raw: StoredArticle,
-  names: Map<string, string>,
+  maps: CategoryMaps,
   { full = false } = {},
 ): Article {
   const article = raw;
-  const sectionName = names.get(article.section) ?? article.section;
+  const sectionName = maps.names.get(article.section) ?? article.section;
+  const sub = article.subsectionId ? maps.subs.get(String(article.subsectionId)) : undefined;
   const image = !article.image
     ? `https://picsum.photos/seed/${article.slug}/1200/800`
     : article.image.startsWith("/")
@@ -231,6 +272,7 @@ function present(
     slug: article.slug,
     section: article.section,
     sectionName,
+    ...(sub ? { subsection: sub.slug, subsectionName: sub.name } : {}),
     title: article.title,
     dek: article.dek,
     author: article.author,
@@ -324,9 +366,392 @@ function editionName(hour: number) {
   return "Evening Edition";
 }
 
-export async function fetchSections(): Promise<Section[]> {
+// The full category tree cached briefly in-process — it backs the nav,
+// section pages and the write form, and changes are rare. Category writes
+// call invalidateCategoryCache so edits show on the next request.
+const TREE_TTL = 60_000;
+let treeCache: { at: number; tree: Section[] } | null = null;
+
+export function invalidateCategoryCache() {
+  treeCache = null;
+}
+
+// Active main sections, each with its active subsections (children), both
+// sorted by display order. Inactive categories are hidden everywhere except
+// the admin manager.
+export async function fetchSectionTree(): Promise<Section[]> {
   await connect();
-  return (await getSectionDocs()) as unknown as Section[];
+  if (treeCache && Date.now() - treeCache.at < TREE_TTL) return treeCache.tree;
+  const docs = await getCategoryDocs();
+  const byParent = new Map<string, CategoryDoc[]>();
+  for (const doc of docs) {
+    if (!doc.parent || doc.active === false) continue;
+    const key = String(doc.parent);
+    const list = byParent.get(key);
+    if (list) list.push(doc);
+    else byParent.set(key, [doc]);
+  }
+  const tree = docs
+    .filter((doc) => !doc.parent && doc.active !== false)
+    .map((doc) => ({
+      ...toSection(doc),
+      children: (byParent.get(String(doc._id)) ?? []).map((child) => toSection(child, doc)),
+    }));
+  treeCache = { at: Date.now(), tree };
+  return tree;
+}
+
+export async function fetchSections(): Promise<Section[]> {
+  return fetchSectionTree();
+}
+
+// Main nav only lists sections marked for navigation.
+export async function fetchNavSections(): Promise<Section[]> {
+  return (await fetchSections()).filter((section) => section.showInNav !== false);
+}
+
+// Resolves a URL path to category docs. Returns null when the section or
+// subsection doesn't exist or is inactive — callers render a 404.
+async function resolveCategoryPath(
+  sectionSlug: string,
+  subsectionSlug?: string,
+): Promise<{ parent: CategoryDoc; child?: CategoryDoc } | null> {
+  const docs = await getCategoryDocs();
+  const parent = docs.find((doc) => !doc.parent && doc.slug === sectionSlug);
+  if (!parent || parent.active === false) return null;
+  if (!subsectionSlug) return { parent };
+  const child = docs.find(
+    (doc) => doc.parent && String(doc.parent) === String(parent._id) && doc.slug === subsectionSlug,
+  );
+  if (!child || child.active === false) return null;
+  return { parent, child };
+}
+
+export async function fetchCategoryPath(
+  sectionSlug: string,
+  subsectionSlug?: string,
+): Promise<{ section: Section; subsection?: Section } | null> {
+  await connect();
+  const resolved = await resolveCategoryPath(sectionSlug, subsectionSlug);
+  if (!resolved) return null;
+  return {
+    section: toSection(resolved.parent),
+    ...(resolved.child ? { subsection: toSection(resolved.child, resolved.parent) } : {}),
+  };
+}
+
+// Published stories for a section (its own plus every subsection's) or one
+// subsection. Matches the category id fields written by the editor as well
+// as the plain `section` slug on older stories.
+export async function fetchCategoryArticles(params: {
+  sectionSlug: string;
+  subsectionSlug?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<CategoryPage | null> {
+  await connect();
+  await io();
+  const resolved = await resolveCategoryPath(params.sectionSlug, params.subsectionSlug);
+  if (!resolved) return null;
+  const { parent, child } = resolved;
+  const limit = Math.min(params.limit || 25, 50);
+  const offset = Math.max(params.offset || 0, 0);
+
+  let filter: Record<string, unknown>;
+  if (child) {
+    filter = {
+      ...PUBLISHED(),
+      $or: [
+        { subsectionId: child._id },
+        { subsection: child.slug, subsectionId: { $exists: false } },
+        // Stories filed before subsection ids existed may carry the child
+        // slug in the legacy `section` field.
+        { section: child.slug, sectionId: { $exists: false } },
+      ],
+    };
+  } else {
+    const children = await collections.sections
+      .find({ parent: parent._id }, { projection: { slug: 1 } })
+      .toArray();
+    filter = {
+      ...PUBLISHED(),
+      $or: [
+        { sectionId: parent._id },
+        { subsectionId: { $in: children.map((doc) => doc._id) } },
+        { section: { $in: [parent.slug, ...children.map((doc) => doc.slug)] }, sectionId: { $exists: false } },
+      ],
+    };
+  }
+
+  const [maps, total, found] = await Promise.all([
+    categoryMaps(),
+    collections.articles.countDocuments(filter),
+    collections.articles.find(filter, LIST).sort({ publishedAt: -1 }).skip(offset).limit(limit).toArray(),
+  ]);
+  return {
+    section: toSection(parent),
+    ...(child ? { subsection: toSection(child, parent) } : {}),
+    total,
+    articles: (found as unknown as StoredArticle[]).map((a) => present(a, maps)),
+  };
+}
+
+// The whole tree including inactive categories, with each node's associated
+// story count — the data behind /admin/categories.
+export async function fetchAdminCategories(): Promise<Section[]> {
+  await connect();
+  await io();
+  const [docs, rows] = await Promise.all([
+    getCategoryDocs(),
+    collections.articles
+      .find({}, { projection: { section: 1, sectionId: 1, subsection: 1, subsectionId: 1 } })
+      .toArray(),
+  ]);
+  const idOf = (doc: CategoryDoc) => String(doc._id);
+  // An article "belongs" to a category through the stored ids, or — for
+  // stories written before ids existed — a matching slug under the right
+  // parent.
+  const countFor = (doc: CategoryDoc, parent?: CategoryDoc) => {
+    const id = idOf(doc);
+    let count = 0;
+    for (const article of rows) {
+      if (doc.parent && parent) {
+        const inParent =
+          String(article.sectionId ?? "") === String(parent._id) || article.section === parent.slug;
+        if (
+          String(article.subsectionId ?? "") === id ||
+          (inParent && article.subsection === doc.slug) ||
+          (!article.sectionId && !article.subsectionId && !article.subsection && article.section === doc.slug)
+        ) {
+          count += 1;
+        }
+      } else if (
+        String(article.sectionId ?? "") === id ||
+        (!article.sectionId && article.section === doc.slug)
+      ) {
+        count += 1;
+      }
+    }
+    return count;
+  };
+  return docs
+    .filter((doc) => !doc.parent)
+    .map((doc) => {
+      const children = docs.filter(
+        (child) => child.parent && String(child.parent) === String(doc._id),
+      );
+      return {
+        ...toSection(doc),
+        articleCount: countFor(doc),
+        children: children.map((child) => ({ ...toSection(child, doc), articleCount: countFor(child, doc) })),
+      };
+    });
+}
+
+export type CategoryInput = {
+  name: string;
+  slug?: string;
+  blurb?: string;
+  parentSlug?: string | null;
+  active?: boolean;
+  showInNav?: boolean;
+  featured?: boolean;
+  seoTitle?: string;
+  seoDescription?: string;
+};
+
+type PreparedCategory =
+  | { error: string }
+  | {
+      fields: {
+        name: string;
+        slug: string;
+        blurb: string;
+        parent: CategoryDoc | null;
+        active: boolean;
+        showInNav: boolean;
+        featured: boolean;
+        seoTitle: string;
+        seoDescription: string;
+      };
+    };
+
+// Validates the shared category fields; `parentSlug` picks a main section as
+// the parent — omit it to create/edit a top-level section.
+async function prepareCategory(input: CategoryInput): Promise<PreparedCategory> {
+  const name = String(input.name ?? "").trim();
+  if (name.length < 2 || name.length > 80) {
+    return { error: "Give the category a name between 2 and 80 characters." };
+  }
+  const slug = slugify(String(input.slug ?? "") || name).slice(0, 80);
+  if (!slug) {
+    return { error: "Give the category a URL-friendly slug." };
+  }
+  let parent: CategoryDoc | null = null;
+  if (input.parentSlug) {
+    parent = await collections.sections.findOne({ parent: null, slug: String(input.parentSlug) });
+    if (!parent) return { error: "Choose a main section as the parent." };
+  }
+  return {
+    fields: {
+      name,
+      slug,
+      blurb: String(input.blurb ?? "").trim().slice(0, 300),
+      parent,
+      active: input.active !== false,
+      showInNav: input.showInNav !== false,
+      featured: Boolean(input.featured),
+      seoTitle: String(input.seoTitle ?? "").trim().slice(0, 70),
+      seoDescription: String(input.seoDescription ?? "").trim().slice(0, 160),
+    },
+  };
+}
+
+export async function insertCategory(input: CategoryInput): Promise<{ id: string } | { error: string }> {
+  await connect();
+  const prepared = await prepareCategory(input);
+  if ("error" in prepared) return prepared;
+  const { parent, seoTitle, seoDescription, ...fields } = prepared.fields;
+  const [eldest] = await collections.sections
+    .find({ parent: parent ? parent._id : null }, { projection: { order: 1 } })
+    .sort({ order: -1 })
+    .limit(1)
+    .toArray();
+  const now = new Date();
+  try {
+    const result = await collections.sections.insertOne({
+      ...fields,
+      parent: parent ? parent._id : null,
+      order: (eldest?.order ?? -1) + 1,
+      ...(seoTitle ? { seoTitle } : {}),
+      ...(seoDescription ? { seoDescription } : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
+    invalidateCategoryCache();
+    return { id: String(result.insertedId) };
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      return { error: "A category with that slug already exists in this section." };
+    }
+    throw error;
+  }
+}
+
+export async function updateCategory(
+  id: string,
+  input: CategoryInput,
+): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  if (!ObjectId.isValid(id)) return { error: "Unknown category." };
+  const _id = new ObjectId(id);
+  const doc = await collections.sections.findOne({ _id });
+  if (!doc) return { error: "Unknown category." };
+  const prepared = await prepareCategory(input);
+  if ("error" in prepared) return prepared;
+  const { parent, seoTitle, seoDescription, ...fields } = prepared.fields;
+  if (parent && String(parent._id) !== String(doc.parent ?? "")) {
+    return { error: "A category can't be moved to a different parent." };
+  }
+  const update: Record<string, unknown> = {
+    $set: {
+      ...fields,
+      ...(seoTitle ? { seoTitle } : {}),
+      ...(seoDescription ? { seoDescription } : {}),
+      updatedAt: new Date(),
+    },
+  };
+  // Empty strings clear the SEO overrides.
+  const unset: Record<string, string> = {};
+  if (!seoTitle) unset.seoTitle = "";
+  if (!seoDescription) unset.seoDescription = "";
+  if (Object.keys(unset).length) update.$unset = unset;
+  try {
+    await collections.sections.updateOne({ _id }, update as Parameters<typeof collections.sections.updateOne>[1]);
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      return { error: "A category with that slug already exists in this section." };
+    }
+    throw error;
+  }
+  invalidateCategoryCache();
+  return { ok: true };
+}
+
+// Toggles individual flags (active / showInNav / featured) without touching
+// the rest of the category — used by the admin list's quick switches.
+export async function setCategoryStatus(
+  id: string,
+  flags: { active?: boolean; showInNav?: boolean; featured?: boolean },
+): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  if (!ObjectId.isValid(id)) return { error: "Unknown category." };
+  const sets: Record<string, unknown> = { updatedAt: new Date() };
+  if (typeof flags.active === "boolean") sets.active = flags.active;
+  if (typeof flags.showInNav === "boolean") sets.showInNav = flags.showInNav;
+  if (typeof flags.featured === "boolean") sets.featured = flags.featured;
+  const result = await collections.sections.updateOne({ _id: new ObjectId(id) }, { $set: sets });
+  if (!result.matchedCount) return { error: "Unknown category." };
+  invalidateCategoryCache();
+  return { ok: true };
+}
+
+// Swaps a category's order with the sibling `direction` steps away (-1 up,
+// +1 down). A no-op at either edge.
+export async function moveCategory(id: string, direction: -1 | 1): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  if (!ObjectId.isValid(id)) return { error: "Unknown category." };
+  const _id = new ObjectId(id);
+  const doc = await collections.sections.findOne({ _id });
+  if (!doc) return { error: "Unknown category." };
+  const siblings = await collections.sections
+    .find({ parent: doc.parent ?? null })
+    .sort({ order: 1 })
+    .toArray();
+  const index = siblings.findIndex((sibling) => String(sibling._id) === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= siblings.length) return { ok: true };
+  await collections.sections.bulkWrite([
+    {
+      updateOne: {
+        filter: { _id: siblings[index]._id },
+        update: { $set: { order: siblings[target].order ?? index, updatedAt: new Date() } },
+      },
+    },
+    {
+      updateOne: {
+        filter: { _id: siblings[target]._id },
+        update: { $set: { order: siblings[index].order ?? target, updatedAt: new Date() } },
+      },
+    },
+  ]);
+  invalidateCategoryCache();
+  return { ok: true };
+}
+
+// Removes a category only when nothing references it; categories with
+// children or stories are deactivated instead so links keep working.
+export async function deleteCategory(id: string): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  if (!ObjectId.isValid(id)) return { error: "Unknown category." };
+  const _id = new ObjectId(id);
+  const doc = await collections.sections.findOne({ _id });
+  if (!doc) return { error: "Unknown category." };
+  const children = await collections.sections.countDocuments({ parent: _id });
+  if (children > 0) {
+    return { error: "This section still has subsections — remove or deactivate them first." };
+  }
+  const linked = await collections.articles.countDocuments({
+    $or: [{ sectionId: _id }, { subsectionId: _id }, { section: doc.slug }, { subsection: doc.slug }],
+  });
+  if (linked > 0) {
+    return {
+      error: `${linked} ${linked === 1 ? "story is" : "stories are"} filed under this category — deactivate it instead.`,
+    };
+  }
+  await collections.sections.deleteOne({ _id });
+  invalidateCategoryCache();
+  return { ok: true };
 }
 
 export async function fetchEdition(): Promise<Edition> {
@@ -385,18 +810,18 @@ export async function fetchTicker(): Promise<TickerItem[]> {
 export async function fetchHome(): Promise<HomeData> {
   await connect();
   await io();
-  const [sections, newest, markets] = await Promise.all([
-    getSectionDocs(),
+  const [sections, newest, markets, maps] = await Promise.all([
+    fetchSectionTree(),
     collections.articles.find(PUBLISHED(), LIST).sort({ publishedAt: -1 }).toArray(),
     getMarketDocs(),
+    categoryMaps(),
   ]);
-  const names = new Map(sections.map((s) => [s.slug, s.name]));
   const used = new Set<StoredArticle>();
   // Takes the newest unused stories from a pool so nothing appears twice on the page.
   const take = (pool: StoredArticle[], count: number) => {
     const picked = pool.filter((a) => !used.has(a)).slice(0, count);
     picked.forEach((a) => used.add(a));
-    return picked.map((a) => present(a, names));
+    return picked.map((a) => present(a, maps));
   };
   const docs = newest as unknown as StoredArticle[];
   const inSection = (slug: string) => docs.filter((a) => a.section === slug);
@@ -419,19 +844,20 @@ export async function fetchHome(): Promise<HomeData> {
   const desks = deskSections
     .map((section) => {
       const [feature, ...list] = take(inSection(section.slug), 3);
-      return { section: section as unknown as Section, feature, list };
+      return { section, feature, list };
     })
     .filter((desk) => desk.feature);
   const mostRead = [...docs]
     .sort((a, b) => b.reads - a.reads)
     .slice(0, 5)
-    .map((a) => present(a, names));
+    .map((a) => present(a, maps));
 
   return { lead, briefs, top, across, desks, mostRead, markets: await withLiveQuotes(markets as unknown as Market[]), opinion, pictures };
 }
 
 export async function fetchArticles(params: {
   section?: string;
+  subsection?: string;
   q?: string;
   limit?: number;
   offset?: number;
@@ -445,6 +871,7 @@ export async function fetchArticles(params: {
 
   const filter: Record<string, unknown> = { ...PUBLISHED() };
   if (params.section) filter.section = String(params.section);
+  if (params.subsection) filter.subsection = String(params.subsection);
   const window: Record<string, Date> = { ...PUBLISHED().publishedAt };
   if (params.olderThanDays && params.olderThanDays > 0) window.$lte = new Date(Date.now() - params.olderThanDays * 24 * HOUR);
   if (params.newerThanDays) window.$gt = new Date(Date.now() - params.newerThanDays * 24 * HOUR);
@@ -457,12 +884,12 @@ export async function fetchArticles(params: {
     }));
   }
 
-  const [names, total, found] = await Promise.all([
-    sectionNames(),
+  const [maps, total, found] = await Promise.all([
+    categoryMaps(),
     collections.articles.countDocuments(filter),
     collections.articles.find(filter, LIST).sort({ publishedAt: -1 }).skip(offset).limit(limit).toArray(),
   ]);
-  return { total, articles: (found as unknown as StoredArticle[]).map((a) => present(a, names)) };
+  return { total, articles: (found as unknown as StoredArticle[]).map((a) => present(a, maps)) };
 }
 
 // Fetches articles for an explicit slug list (saved stories, reading history),
@@ -471,15 +898,15 @@ export async function fetchArticlesBySlugs(slugs: string[]): Promise<Article[]> 
   await io();
   if (!slugs.length) return [];
   await connect();
-  const [names, docs] = await Promise.all([
-    sectionNames(),
+  const [maps, docs] = await Promise.all([
+    categoryMaps(),
     collections.articles.find({ slug: { $in: slugs } }, LIST).toArray(),
   ]);
   const bySlug = new Map((docs as unknown as StoredArticle[]).map((a) => [a.slug, a]));
   return slugs
     .map((slug) => bySlug.get(slug))
     .filter((a): a is StoredArticle => Boolean(a))
-    .map((a) => present(a, names));
+    .map((a) => present(a, maps));
 }
 
 export async function fetchArticle(
@@ -500,8 +927,8 @@ export async function fetchArticle(
   const relatedQuery = found.related?.length
     ? { slug: { $in: found.related } }
     : { ...PUBLISHED(), section: found.section, slug: { $ne: found.slug } };
-  const [names, relatedDocs] = await Promise.all([
-    sectionNames(),
+  const [maps, relatedDocs] = await Promise.all([
+    categoryMaps(),
     collections.articles
       .find(relatedQuery, LIST)
       .sort({ publishedAt: -1 })
@@ -524,8 +951,8 @@ export async function fetchArticle(
     stats = { views: found.views ?? 0, readers, saved };
   }
   return {
-    article: present(found, names, { full: true }),
-    related: related.map((a) => present(a, names)),
+    article: present(found, maps, { full: true }),
+    related: related.map((a) => present(a, maps)),
     ownerId: found.authorId ?? null,
     stats,
   };
@@ -573,6 +1000,8 @@ export type ArticleInput = {
   title: string;
   slug?: string;
   section: string;
+  // Optional subsection slug belonging to `section`.
+  subsection?: string;
   dek: string;
   author: string;
   city: string;
@@ -590,6 +1019,9 @@ export type ArticleInput = {
 type ArticleFields = {
   title: string;
   section: string;
+  sectionId: ObjectId;
+  subsection?: string;
+  subsectionId?: ObjectId;
   dek: string;
   author: string;
   city: string;
@@ -621,9 +1053,21 @@ async function prepareArticle(input: ArticleInput): Promise<{ error: string } | 
   if (title.length < 10 || title.length > 200) {
     return { error: "Give the story a headline between 10 and 200 characters." };
   }
-  const desk = await collections.sections.findOne({ slug: section }, { projection: { _id: 1 } });
-  if (!desk) {
+  const desk = await collections.sections.findOne({ slug: section, parent: null });
+  if (!desk || desk.active === false) {
     return { error: "Choose a desk for the story." };
+  }
+  // A subsection must belong to the chosen section and be active.
+  const subsectionSlug = String(input.subsection ?? "").trim();
+  let subsection: string | undefined;
+  let subsectionId: ObjectId | undefined;
+  if (subsectionSlug) {
+    const sub = await collections.sections.findOne({ parent: desk._id, slug: subsectionSlug });
+    if (!sub || sub.active === false) {
+      return { error: "The chosen subsection doesn't belong to the selected section." };
+    }
+    subsection = sub.slug;
+    subsectionId = sub._id;
   }
   if (dek.length < 10 || dek.length > 300) {
     return { error: "Write a standfirst between 10 and 300 characters." };
@@ -680,6 +1124,8 @@ async function prepareArticle(input: ArticleInput): Promise<{ error: string } | 
     fields: {
       title,
       section,
+      sectionId: desk._id,
+      ...(subsection ? { subsection, subsectionId } : {}),
       dek,
       author,
       city,
@@ -738,6 +1184,13 @@ export async function updateArticle(
   const prepared = await prepareArticle(input);
   if ("error" in prepared) return prepared;
   const { image, publishedAt, ...fields } = prepared.fields;
+  const unset: Record<string, string> = {};
+  if (image === null) unset.image = "";
+  // A cleared subsection removes both fields from the stored story.
+  if (!fields.subsection) {
+    unset.subsection = "";
+    unset.subsectionId = "";
+  }
   await collections.articles.updateOne(
     { slug, authorId: userId },
     {
@@ -747,7 +1200,7 @@ export async function updateArticle(
         ...(publishedAt ? { publishedAt } : {}),
         ...(image ? { image } : {}),
       },
-      ...(image === null ? { $unset: { image: "" } } : {}),
+      ...(Object.keys(unset).length ? { $unset: unset } : {}),
     },
   );
   return { slug };
@@ -772,6 +1225,7 @@ export async function fetchEditableArticle(slug: string, userId: string): Promis
     lead: doc.lead ?? "",
     body: doc.body,
     section: doc.section,
+    subsection: doc.subsection ?? "",
     author: doc.author,
     city: doc.city,
     tags: doc.tags ?? [],

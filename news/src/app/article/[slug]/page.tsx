@@ -54,7 +54,7 @@ async function ArticleContent({ params, searchParams }: Props) {
     body.length >= 4
       ? body[body.length - 1].replace(/<[^>]*>/g, " ").match(/^.+?[.!?](?=\s|$)/)?.[0]
       : undefined;
-  const sectionHref = `/section/${article.section}`;
+  const sectionHref = `/${article.section}`;
 
   return (
     <>
@@ -70,8 +70,17 @@ async function ArticleContent({ params, searchParams }: Props) {
       <article className="story">
         <header className="story-head">
           <nav className="breadcrumb" aria-label="Breadcrumb">
-            <Link href="/">Home</Link> · <Link href={sectionHref}>{article.sectionName}</Link> ·{" "}
-            <span>{article.city}</span>
+            <Link href="/">Home</Link> · <Link href={sectionHref}>{article.sectionName}</Link>
+            {article.subsection && article.subsectionName && (
+              <>
+                {" "}
+                ·{" "}
+                <Link href={`${sectionHref}/${article.subsection}`}>
+                  {article.subsectionName}
+                </Link>
+              </>
+            )}{" "}
+            · <span>{article.city}</span>
           </nav>
           <p className="story-kicker">
             <Link href={sectionHref} className="tag solid">

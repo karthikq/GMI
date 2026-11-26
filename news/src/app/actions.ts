@@ -24,13 +24,19 @@ import {
 import { recordRead, recordView, toggleBookmark } from "@/lib/reading";
 import {
   deleteArticle,
+  deleteCategory,
   insertArticle,
+  insertCategory,
   insertSubscriber,
+  moveCategory,
   searchArticles as searchArticleDocs,
   setNewsletterSubscription,
   setSubscriberFormat,
   setSubscriberLetterTime,
+  setCategoryStatus,
   updateArticle,
+  updateCategory,
+  type CategoryInput,
 } from "@/lib/queries";
 import type { ArticleInput } from "@/lib/queries";
 
@@ -528,6 +534,80 @@ export async function deleteStory(slug: string): Promise<{ message: string } | v
   if ("error" in result) return { message: result.error };
   revalidatePath("/", "layout");
   redirect("/");
+}
+
+// Category management — the /admin/categories dashboard. Admins only, same
+// gate as the subscriber dashboard.
+export async function createCategory(
+  input: CategoryInput,
+): Promise<{ ok: true; id: string } | { error: string }> {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") return { error: "Only admins can manage categories." };
+  try {
+    const result = await insertCategory(input);
+    if ("error" in result) return result;
+    revalidatePath("/", "layout");
+    return { ok: true, id: result.id };
+  } catch {
+    return { error: "Couldn't save the category. Try again." };
+  }
+}
+
+export async function editCategory(
+  id: string,
+  input: CategoryInput,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") return { error: "Only admins can manage categories." };
+  try {
+    const result = await updateCategory(id, input);
+    if ("ok" in result) revalidatePath("/", "layout");
+    return result;
+  } catch {
+    return { error: "Couldn't update the category. Try again." };
+  }
+}
+
+export async function reorderCategory(
+  id: string,
+  direction: -1 | 1,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") return { error: "Only admins can manage categories." };
+  try {
+    const result = await moveCategory(id, direction);
+    if ("ok" in result) revalidatePath("/", "layout");
+    return result;
+  } catch {
+    return { error: "Couldn't reorder categories. Try again." };
+  }
+}
+
+export async function setCategoryFlags(
+  id: string,
+  flags: { active?: boolean; showInNav?: boolean; featured?: boolean },
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") return { error: "Only admins can manage categories." };
+  try {
+    const result = await setCategoryStatus(id, flags);
+    if ("ok" in result) revalidatePath("/", "layout");
+    return result;
+  } catch {
+    return { error: "Couldn't update the category. Try again." };
+  }
+}
+
+export async function removeCategory(id: string): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") return { error: "Only admins can manage categories." };
+  try {
+    const result = await deleteCategory(id);
+    if ("ok" in result) revalidatePath("/", "layout");
+    return result;
+  } catch {
+    return { error: "Couldn't delete the category. Try again." };
+  }
 }
 
 // Signed params for uploading a story image straight from the browser, so the

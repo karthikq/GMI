@@ -62,7 +62,7 @@ export default function ArticleCard({ article, variant = "card", showSection = t
         </Link>
         <div className="across-body">
           <div className="across-meta">
-            <Link href={`/section/${article.section}`} className="across-section">
+            <Link href={`/${article.section}`} className="across-section">
               {article.sectionName}
             </Link>
             <time dateTime={article.publishedAt}>{acrossDate(article.publishedAt)}</time>
@@ -97,8 +97,8 @@ export default function ArticleCard({ article, variant = "card", showSection = t
       </Link>
       <div className="card-body">
         {showSection && (
-          <Link href={`/section/${article.section}`} className="kicker">
-            {article.sectionName}
+          <Link href={`/${article.section}`} className="kicker">
+            {article.subsectionName ?? article.sectionName}
           </Link>
         )}
         <h3>

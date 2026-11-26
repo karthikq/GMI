@@ -14,6 +14,7 @@ const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
 const geometric = Montserrat({ variable: "--font-geometric", subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
   title: { default: "Good Morning Indian", template: "%s · Good Morning Indian" },
   description: "World, business and culture news, reported with care.",
 };

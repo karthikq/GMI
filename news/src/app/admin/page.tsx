@@ -112,7 +112,10 @@ async function AdminContent({
         <p>
           Every address on the list and whether its newsletter issue went out.
           &ldquo;Confirmed&rdquo; means only the subscribe email went out so far;
-          &ldquo;Email off&rdquo; means BREVO_API_KEY isn&apos;t configured.
+          &ldquo;Email off&rdquo; means BREVO_API_KEY isn&apos;t configured.{" "}
+          <Link href="/admin/categories" className="more">
+            Manage categories →
+          </Link>
         </p>
       </header>
 

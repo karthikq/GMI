@@ -1,16 +1,42 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import CurrencyToggle from "@/components/CurrencyToggle";
 import MarketQuote from "@/components/MarketQuote";
+import SubsectionPage from "@/components/SubsectionPage";
 import { Offline, PageSkeleton } from "@/components/States";
-import { getMarketDetail, getMarketViews, type MarketDetail, type MarketView } from "@/lib/api";
+import {
+  getCategoryPath,
+  getMarketDetail,
+  getMarketViews,
+  type MarketDetail,
+  type MarketView,
+} from "@/lib/api";
 import { MARKET_RANGES, type MarketRange } from "@/lib/markets";
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ range?: string | string[] }>;
+  searchParams: Promise<{ range?: string | string[]; page?: string }>;
 };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  // A /markets/<slug> URL is a market detail first; when no symbol matches it
+  // may still be a Markets subsection (e.g. /markets/commodities).
+  const path = await getCategoryPath("markets", slug);
+  if (!path?.subsection) return {};
+  const { subsection, section } = path;
+  const title = subsection.seoTitle ?? `${subsection.name} — ${section.name}`;
+  const description =
+    subsection.seoDescription ?? subsection.blurb ?? `Latest ${subsection.name} news.`;
+  const url = `/${section.slug}/${subsection.slug}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: { title, description, url, type: "website", siteName: "Good Morning Indian" },
+  };
+}
 
 function MarketList({ title, markets, current }: { title: string; markets: MarketView[]; current: string }) {
   if (!markets.length) return null;
@@ -52,11 +78,17 @@ function toRupees(detail: MarketDetail, rate: number): MarketDetail {
 }
 
 async function MarketContent({ params, searchParams }: Props) {
-  const [{ slug }, { range: raw }] = await Promise.all([params, searchParams]);
-  const range = (Object.keys(MARKET_RANGES) as MarketRange[]).find((r) => r === raw) ?? "1D";
-  const [markets, detail] = await Promise.all([getMarketViews(), getMarketDetail(slug, range)]);
+  const [{ slug }, { range: raw, page: rawPage }] = await Promise.all([params, searchParams]);
+  const markets = await getMarketViews();
   if (!markets) return <Offline />;
-  if (!markets.some((m) => m.slug === slug)) notFound();
+  // Subsection slugs like /markets/commodities land here because the markets
+  // routes take precedence over the generic section routes.
+  if (!markets.some((m) => m.slug === slug)) {
+    const page = Math.max(1, parseInt(String(rawPage ?? "1"), 10) || 1);
+    return <SubsectionPage sectionSlug="markets" subsectionSlug={slug} page={page} />;
+  }
+  const range = (Object.keys(MARKET_RANGES) as MarketRange[]).find((r) => r === raw) ?? "1D";
+  const detail = await getMarketDetail(slug, range);
   if (!detail) return <Offline />;
 
   return (
