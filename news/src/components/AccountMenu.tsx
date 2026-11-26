@@ -19,6 +19,8 @@ type AccountMenuProps = {
   image?: string;
   variant: "topbar" | "nav";
   plan?: PlanSummary;
+  canViewAnalytics?: boolean;
+  canViewSubscribers?: boolean;
 };
 
 const SUB_STATUS: Record<string, string> = {
@@ -31,7 +33,15 @@ const SUB_STATUS: Record<string, string> = {
   EXPIRED: "Expired",
 };
 
-export default function AccountMenu({ name, email, image, variant, plan }: AccountMenuProps) {
+export default function AccountMenu({
+  name,
+  email,
+  image,
+  variant,
+  plan,
+  canViewAnalytics,
+  canViewSubscribers,
+}: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -114,6 +124,34 @@ export default function AccountMenu({ name, email, image, variant, plan }: Accou
               >
                 Your profile
               </Link>
+              <Link
+                href="/profile/edit"
+                className="account-menu-item"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+              >
+                Edit profile
+              </Link>
+              {canViewAnalytics && (
+                <Link
+                  href="/analytics"
+                  className="account-menu-item"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                >
+                  Analytics
+                </Link>
+              )}
+              {canViewSubscribers && (
+                <Link
+                  href="/admin"
+                  className="account-menu-item"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                >
+                  Subscribers
+                </Link>
+              )}
               {plan && (
                 <div className="account-menu-sub">
                   <button

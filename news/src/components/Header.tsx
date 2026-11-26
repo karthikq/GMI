@@ -77,6 +77,8 @@ async function NavAccount() {
       email={user?.email}
       image={user ? profileImage(user) : undefined}
       variant="nav"
+      canViewAnalytics={isEditorial(user?.role)}
+      canViewSubscribers={user?.role === "admin"}
       plan={
         user
           ? {
