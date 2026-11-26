@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import ArticleCard from "@/components/ArticleCard";
 import MarketChart from "@/components/MarketChart";
+import SubsectionNav from "@/components/SubsectionNav";
 import { Offline, PageSkeleton } from "@/components/States";
-import { getMarketViews, type MarketView } from "@/lib/api";
+import { getCategoryArticles, getMarketViews, getSectionTree, type MarketView } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Markets" };
 
 async function MarketsContent() {
-  const markets = await getMarketViews();
+  const [markets, tree, stories] = await Promise.all([
+    getMarketViews(),
+    getSectionTree(),
+    getCategoryArticles({ sectionSlug: "markets", limit: 8 }),
+  ]);
   if (!markets) return <Offline />;
+  const section = tree?.find((item) => item.slug === "markets");
 
   return (
     <>
@@ -17,8 +24,23 @@ async function MarketsContent() {
         <h1>Markets</h1>
         <p>Indices and commodities · daily closes, last three months</p>
       </header>
+      {section?.children?.length ? (
+        <SubsectionNav section={section} items={section.children} />
+      ) : null}
       <MarketGroup title="Indices" markets={markets.filter((m) => !m.commodity)} />
       <MarketGroup title="Commodities" markets={markets.filter((m) => m.commodity)} />
+      {stories && stories.articles.length > 0 && (
+        <section className="section-block" aria-labelledby="markets-stories">
+          <div className="section-head">
+            <h2 id="markets-stories">Latest markets stories</h2>
+          </div>
+          <div className="grid">
+            {stories.articles.map((article) => (
+              <ArticleCard key={article.slug} article={article} showSection={false} />
+            ))}
+          </div>
+        </section>
+      )}
     </>
   );
 }

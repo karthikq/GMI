@@ -76,9 +76,11 @@ export default function NavLinks({ sections }: { sections: Section[] }) {
   }, [open]);
 
   const sectionLink = (section: Section) => {
-    const href = `/section/${section.slug}`;
+    const href = `/${section.slug}`;
+    // A subsection URL keeps its parent section highlighted.
+    const current = pathname === href || pathname.startsWith(`${href}/`);
     return (
-      <Link href={href} aria-current={pathname === href ? "page" : undefined}>
+      <Link href={href} aria-current={current ? "page" : undefined}>
         {section.name}
       </Link>
     );
@@ -127,7 +129,7 @@ export default function NavLinks({ sections }: { sections: Section[] }) {
       {open && overflow.length > 0 && (
         <div className="nav-more-panel" role="menu">
           {overflow.map((section) => (
-            <Link key={section.slug} role="menuitem" href={`/section/${section.slug}`}>
+            <Link key={section.slug} role="menuitem" href={`/${section.slug}`}>
               {section.name}
             </Link>
           ))}

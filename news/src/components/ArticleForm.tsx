@@ -27,7 +27,7 @@ const MIN_TITLE = 10;
 const MIN_DEK = 10;
 const MIN_LEAD = 30;
 
-type FieldName = "title" | "section" | "dek" | "author" | "city" | "lead" | "body";
+type FieldName = "title" | "section" | "subsection" | "dek" | "author" | "city" | "lead" | "body";
 
 type Source = { label: string; url: string };
 
@@ -38,6 +38,7 @@ type Snapshot = {
   lead: string;
   body: string[];
   section: string;
+  subsection?: string;
   tags: string[];
   author: string;
   city: string;
@@ -114,6 +115,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
   const [lead, setLead] = useState(initial?.lead ?? "");
   const [blocks, setBlocks] = useState<string[]>(initial?.body ?? []);
   const [section, setSection] = useState(initial?.section ?? "");
+  const [subsection, setSubsection] = useState(initial?.subsection ?? "");
   const [author, setAuthor] = useState(initial?.author ?? "");
   const [city, setCity] = useState(initial?.city ?? "");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
@@ -158,6 +160,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
     lead,
     body: blocks,
     section,
+    subsection,
     tags,
     author,
     city,
@@ -188,6 +191,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
         setLead(saved.lead);
         setBlocks(saved.body ?? []);
         setSection(saved.section);
+        setSubsection(saved.subsection ?? "");
         setAuthor(saved.author);
         setCity(saved.city);
         setTags(saved.tags ?? []);
@@ -236,6 +240,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
           lead,
           body: blocks,
           section,
+          subsection,
           tags,
           author,
           city,
@@ -244,7 +249,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
     }, 1200);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, dek, lead, blocks, section, tags, author, city, slug, publishAt, breaking, seoTitle, seoDesc, related, sources, imageData]);
+  }, [title, dek, lead, blocks, section, subsection, tags, author, city, slug, publishAt, breaking, seoTitle, seoDesc, related, sources, imageData]);
 
   // Debounced related-article search.
   useEffect(() => {
@@ -265,6 +270,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
       lead,
       body: blocks,
       section,
+      subsection,
       tags,
       author,
       city,
@@ -291,6 +297,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
     setLead("");
     setBlocks([]);
     setSection("");
+    setSubsection("");
     setAuthor("");
     setCity("");
     setTags([]);
@@ -314,6 +321,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
     setLead(revision.lead);
     setBlocks(revision.body);
     setSection(revision.section);
+    setSubsection(revision.subsection ?? "");
     setTags(revision.tags);
     setAuthor(revision.author);
     setCity(revision.city);
@@ -346,7 +354,11 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
     const problems: Partial<Record<FieldName, string>> = {};
     if (title.trim().length < MIN_TITLE)
       problems.title = `At least ${MIN_TITLE} characters — ${title.trim().length} so far.`;
-    if (!section) problems.section = "Choose a desk.";
+    if (!section) problems.section = "Choose a section.";
+    const subsectionOptions = sections.find((s) => s.slug === section)?.children ?? [];
+    if (subsection && !subsectionOptions.some((s) => s.slug === subsection)) {
+      problems.subsection = "Choose a subsection from the selected section.";
+    }
     if (dek.trim().length < MIN_DEK)
       problems.dek = `At least ${MIN_DEK} characters — ${dek.trim().length} so far.`;
     if (!author.trim()) problems.author = "Add a byline.";
@@ -365,7 +377,8 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
 
   const FIELD_LABELS: Record<FieldName, string> = {
     title: "Headline",
-    section: "Desk",
+    section: "Section",
+    subsection: "Subsection",
     dek: "Standfirst",
     author: "Byline",
     city: "City",
@@ -450,6 +463,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
       title: title.trim(),
       slug: slug.trim() || undefined,
       section,
+      subsection: subsection || undefined,
       dek: dek.trim(),
       author: author.trim(),
       city: city.trim(),
@@ -473,7 +487,11 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
     });
   };
 
-  const sectionName = sections.find((s) => s.slug === section)?.name ?? section;
+  const sectionDoc = sections.find((s) => s.slug === section);
+  const sectionName = sectionDoc?.name ?? section;
+  const subsectionName = sectionDoc?.children?.find((s) => s.slug === subsection)?.name;
+  // Shown as the kicker in the preview, e.g. "Entertainment > Bollywood".
+  const categoryPath = subsectionName ? `${sectionName} > ${subsectionName}` : sectionName;
 
   // Cancel only warns when there's something to lose.
   const dirty = Boolean(
@@ -710,11 +728,19 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
           <Panel title="Desk & tags">
             <label className="cms-field small" data-invalid={fieldErrors.section || undefined}>
               <span>
-                Category <Req />
+                Section <Req />
               </span>
-              <select value={section} required onChange={(event) => setSection(event.target.value)}>
+              <select
+                value={section}
+                required
+                onChange={(event) => {
+                  setSection(event.target.value);
+                  // A new section means the previous subsection can't apply.
+                  setSubsection("");
+                }}
+              >
                 <option value="" disabled>
-                  Choose a desk
+                  Choose a section
                 </option>
                 {sections.map((s) => (
                   <option key={s.slug} value={s.slug}>
@@ -723,6 +749,22 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
                 ))}
               </select>
               {fieldNote("section", "")}
+            </label>
+            <label className="cms-field small" data-invalid={fieldErrors.subsection || undefined}>
+              <span>Subsection</span>
+              <select
+                value={subsection}
+                disabled={!section}
+                onChange={(event) => setSubsection(event.target.value)}
+              >
+                <option value="">Section only — no subsection</option>
+                {(sections.find((s) => s.slug === section)?.children ?? []).map((s) => (
+                  <option key={s.slug} value={s.slug}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              {fieldNote("subsection", "", "Pick a section first to choose a subsection.")}
             </label>
             <div className="cms-field small">
               <span>Tags</span>
@@ -1044,7 +1086,7 @@ export default function ArticleForm({ sections, initial }: { sections: Section[]
             <article className="story cms-preview">
               <header className="story-head">
                 <p className="story-kicker">
-                  <span className="tag solid">{sectionName || "Desk"}</span>
+                  <span className="tag solid">{categoryPath || "Desk"}</span>
                   {breaking && <span className="tag live">Breaking</span>}
                   {city}
                 </p>

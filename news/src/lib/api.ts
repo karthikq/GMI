@@ -1,24 +1,49 @@
 import { connection } from "next/server";
 import type { MarketRange } from "./markets";
 import {
+  fetchAdminCategories,
   fetchArticle,
   fetchArticles,
+  fetchCategoryArticles,
+  fetchCategoryPath,
   fetchEditableArticle,
   fetchEdition,
   fetchHome,
   fetchMarketDetail,
   fetchMarketViews,
   fetchMarkets,
+  fetchNavSections,
   fetchSections,
+  fetchSectionTree,
   fetchTicker,
 } from "./queries";
 
-export type Section = { slug: string; name: string; blurb: string };
+export type Section = {
+  slug: string;
+  name: string;
+  blurb: string;
+  // Set for categories stored in Mongo; absent in a few legacy call sites.
+  id?: string;
+  parentId?: string | null;
+  parentSlug?: string;
+  order?: number;
+  active?: boolean;
+  showInNav?: boolean;
+  featured?: boolean;
+  seoTitle?: string;
+  seoDescription?: string;
+  children?: Section[];
+  // Admin dashboard only: stories filed under this category.
+  articleCount?: number;
+};
 
 export type Article = {
   slug: string;
   section: string;
   sectionName: string;
+  // Set when the story is filed under a subsection.
+  subsection?: string;
+  subsectionName?: string;
   title: string;
   dek: string;
   author: string;
@@ -68,6 +93,7 @@ export type EditableArticle = {
   lead: string;
   body: string[];
   section: string;
+  subsection?: string;
   author: string;
   city: string;
   tags: string[];
@@ -76,6 +102,13 @@ export type EditableArticle = {
   seo: { title?: string; description?: string };
   breaking: boolean;
   image: string | null;
+};
+
+export type CategoryPage = {
+  section: Section;
+  subsection?: Section;
+  total: number;
+  articles: Article[];
 };
 
 export type Market = { name: string; value: string; change: number };
@@ -135,6 +168,17 @@ async function get<T>(run: () => Promise<T>): Promise<T | null> {
 }
 
 export const getSections = () => get(fetchSections);
+export const getNavSections = () => get(fetchNavSections);
+export const getSectionTree = () => get(fetchSectionTree);
+export const getCategoryPath = (sectionSlug: string, subsectionSlug?: string) =>
+  get(() => fetchCategoryPath(sectionSlug, subsectionSlug));
+export const getCategoryArticles = (params: {
+  sectionSlug: string;
+  subsectionSlug?: string;
+  limit?: number;
+  offset?: number;
+}) => get(() => fetchCategoryArticles(params));
+export const getAdminCategories = () => get(fetchAdminCategories);
 export const getEdition = () => get(fetchEdition);
 export const getTicker = () => get(fetchTicker);
 export const getMarkets = () => get(fetchMarkets);
@@ -147,6 +191,7 @@ export const getEditableArticle = (slug: string, userId: string) => get(() => fe
 
 export function getArticles(params: {
   section?: string;
+  subsection?: string;
   q?: string;
   limit?: number;
   offset?: number;

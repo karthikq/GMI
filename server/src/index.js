@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collections, connect, db } from "./db.js";
-import { seed } from "./seed.js";
+import { seed, seedCategories } from "./seed.js";
 
 const PORT = process.env.PORT || 4000;
 // Base the frontend uses for this API; needed to turn stored image paths into absolute URLs.
@@ -36,7 +36,10 @@ const ROLES = {
   longform: "Senior writer",
 };
 
-const getSections = () => collections.sections.find({}, HIDDEN).sort({ order: 1 }).toArray();
+// Top-level categories only — subsections carry a parent id, while documents
+// written before subsections existed simply lack the field.
+const getSections = () =>
+  collections.sections.find({ parent: null }, HIDDEN).sort({ order: 1 }).toArray();
 const getMarkets = () => collections.markets.find({}, HIDDEN).sort({ order: 1 }).toArray();
 const sectionNames = async () => new Map((await getSections()).map((s) => [s.slug, s.name]));
 
@@ -152,6 +155,65 @@ app.get("/api/health", async (req, res) => {
 
 app.get("/api/sections", async (req, res) => res.json(await getSections()));
 
+// Public category API — active main sections with their active subsections.
+// `_id` stays in the raw docs so children can be keyed to their parent.
+const publicCategory = ({ _id, parent, order, ...doc }) => ({
+  ...doc,
+  id: String(_id),
+  parent: parent ? String(parent) : null,
+});
+
+app.get("/api/categories", async (req, res) => {
+  const docs = await collections.sections
+    .find({ active: { $ne: false } })
+    .sort({ order: 1 })
+    .toArray();
+  const children = new Map();
+  const parents = [];
+  for (const doc of docs) {
+    const item = publicCategory(doc);
+    if (doc.parent) {
+      const key = String(doc.parent);
+      children.set(key, [...(children.get(key) ?? []), item]);
+    } else {
+      parents.push(item);
+    }
+  }
+  res.json(parents.map((item) => ({ ...item, children: children.get(item.id) ?? [] })));
+});
+
+app.get("/api/categories/:slug", async (req, res) => {
+  const section = await collections.sections.findOne({
+    parent: null,
+    slug: req.params.slug,
+    active: { $ne: false },
+  });
+  if (!section) return res.status(404).json({ error: "Category not found" });
+  const children = await collections.sections
+    .find({ parent: section._id, active: { $ne: false } })
+    .sort({ order: 1 })
+    .toArray();
+  res.json({ ...publicCategory(section), children: children.map(publicCategory) });
+});
+
+app.get("/api/categories/:slug/:subsection", async (req, res) => {
+  const section = await collections.sections.findOne(
+    { parent: null, slug: req.params.slug, active: { $ne: false } },
+    { projection: { slug: 1, name: 1 } },
+  );
+  if (!section) return res.status(404).json({ error: "Category not found" });
+  const subsection = await collections.sections.findOne({
+    parent: section._id,
+    slug: req.params.subsection,
+    active: { $ne: false },
+  });
+  if (!subsection) return res.status(404).json({ error: "Category not found" });
+  res.json({
+    ...publicCategory(subsection),
+    section: { slug: section.slug, name: section.name },
+  });
+});
+
 app.get("/api/edition", async (req, res) => {
   const now = new Date();
   const [stories, [market], weather] = await Promise.all([
@@ -226,12 +288,23 @@ app.get("/api/home", async (req, res) => {
 });
 
 app.get("/api/articles", async (req, res) => {
-  const { section, q } = req.query;
+  const { section, subsection, q } = req.query;
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
 
   const filter = visible();
   if (section) filter.section = String(section);
+  // A subsection slug narrows the listing to stories filed under it, matched
+  // by id for new stories and by slug for records written before ids existed.
+  if (subsection) {
+    const subSlug = String(subsection);
+    const desk = await collections.sections.findOne(
+      { slug: subSlug, parent: { $ne: null } },
+      { projection: { _id: 1 } },
+    );
+    if (!desk) return res.status(404).json({ error: "Category not found" });
+    filter.$or = [{ subsectionId: desk._id }, { subsection: subSlug }];
+  }
   const terms = q ? String(q).split(/\s+/).filter(Boolean) : [];
   // Every term must appear somewhere in the story, matching the old substring search.
   if (terms.length) {
@@ -357,9 +430,27 @@ app.post("/api/articles", async (req, res) => {
   if (title.length < 10) {
     return res.status(400).json({ error: "Give the story a headline between 10 and 200 characters." });
   }
-  const desk = await collections.sections.findOne({ slug: section }, { projection: { _id: 1 } });
+  const desk = await collections.sections.findOne(
+    { slug: section, parent: null },
+    { projection: { _id: 1 } },
+  );
   if (!desk) {
     return res.status(400).json({ error: "Choose a desk for the story." });
+  }
+  // A subsection must belong to the chosen section and be active.
+  const subsection = field("subsection");
+  let subsectionId;
+  if (subsection) {
+    const sub = await collections.sections.findOne(
+      { parent: desk._id, slug: subsection },
+      { projection: { _id: 1 } },
+    );
+    if (!sub) {
+      return res
+        .status(400)
+        .json({ error: "The chosen subsection doesn't belong to the selected section." });
+    }
+    subsectionId = sub._id;
   }
   if (dek.length < 10) {
     return res.status(400).json({ error: "Write a standfirst between 10 and 300 characters." });
@@ -442,6 +533,8 @@ app.post("/api/articles", async (req, res) => {
   await collections.articles.insertOne({
     slug,
     section,
+    sectionId: desk._id,
+    ...(subsectionId ? { subsection, subsectionId } : {}),
     title,
     dek,
     author,
@@ -489,6 +582,10 @@ if ((await collections.articles.estimatedDocumentCount()) === 0) {
   const counts = await seed();
   console.log(`Empty database: seeded ${counts.articles} sample articles.`);
 }
+// Older databases only carry the original desks; upsert the canonical
+// section/subsection tree so new categories appear without touching
+// stored stories or admin-made edits.
+await seedCategories();
 
 app.listen(PORT, () => {
   console.log(`News API listening on http://localhost:${PORT}`);

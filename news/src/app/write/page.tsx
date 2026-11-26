@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import ArticleForm from "@/components/ArticleForm";
-import { getSections } from "@/lib/api";
+import { getSectionTree } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { isEditorial } from "@/lib/roles";
 
 export const metadata: Metadata = { title: "Write a story" };
 
 async function Form() {
-  const [sections, user] = await Promise.all([getSections(), getSessionUser()]);
+  const [sections, user] = await Promise.all([getSectionTree(), getSessionUser()]);
 
   if (!isEditorial(user?.role)) {
     return (

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { getEdition, getMarkets, getSections, getTicker } from "@/lib/api";
+import { getEdition, getMarkets, getNavSections, getTicker } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 import { profileImage } from "@/lib/avatar";
 import { marketSlug } from "@/lib/markets";
@@ -117,12 +117,12 @@ async function EditorialLink() {
 }
 
 async function Sections() {
-  const sections = await getSections();
+  const sections = await getNavSections();
   return <NavLinks sections={sections ?? []} />;
 }
 
 async function MobileNav() {
-  const [sections, user] = await Promise.all([getSections(), getSessionUser()]);
+  const [sections, user] = await Promise.all([getNavSections(), getSessionUser()]);
   return (
     <MobileMenu
       sections={sections ?? []}

@@ -121,10 +121,11 @@ export default function MobileMenu({
               </Link>
             </li>
             {sections.map((section) => {
-              const href = `/section/${section.slug}`;
+              const href = `/${section.slug}`;
+              const current = pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <li key={section.slug}>
-                  <Link href={href} aria-current={pathname === href ? "page" : undefined}>
+                  <Link href={href} aria-current={current ? "page" : undefined}>
                     {section.name}
                   </Link>
                 </li>

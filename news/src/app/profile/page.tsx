@@ -264,7 +264,7 @@ async function ProfileContent() {
               {sections.map((section) => (
                 <li key={section.slug}>
                   <Link
-                    href={`/section/${section.slug}`}
+                    href={`/${section.slug}`}
                     className={followed.has(section.slug) ? "tag solid" : "tag"}
                   >
                     {section.name}
