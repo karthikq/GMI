@@ -5,7 +5,9 @@ import GlobalSendTime from "@/components/GlobalSendTime";
 import NewsletterCard from "@/components/NewsletterCard";
 import { PageSkeleton } from "@/components/States";
 import { getSessionUser } from "@/lib/auth";
+import { getTemplates } from "@/lib/deliveryEngine";
 import { DESK_NEWSLETTERS, FLAGSHIP_NEWSLETTERS } from "@/lib/newsletters";
+import { normalizeFormatList } from "@/lib/newsletterFormats";
 import { fetchSubscriberFormats, fetchSubscriberLetters, fetchSubscriberSendTime } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Newsletters" };
@@ -19,8 +21,12 @@ async function Letters() {
         fetchSubscriberSendTime(user.email),
       ])
     : [[], {} as Record<string, string>, { time: null, timeZone: null }];
+  const templates = await getTemplates().catch(() => []);
   const subscribed = new Set(letterIds);
   const premium = user?.plan === "premium" || user?.plan === "premium-plus";
+  // Which formats each newsletter's template enables — the picker only
+  // offers those; letters without a template offer all eight.
+  const supported = new Map(templates.map((t) => [t.id, normalizeFormatList(t.formats)]));
   const card = (letter: (typeof FLAGSHIP_NEWSLETTERS)[number]) => (
     <NewsletterCard
       key={letter.id}
@@ -29,6 +35,7 @@ async function Letters() {
       signedIn={Boolean(user)}
       premium={premium}
       initialFormat={formats[letter.id]}
+      supportedFormats={supported.get(letter.id)}
     />
   );
 

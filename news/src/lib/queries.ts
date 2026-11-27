@@ -13,6 +13,7 @@ import {
   type SectionLayoutConfig,
 } from "./layouts";
 import { EMAIL_FORMATS, NEWSLETTERS } from "./newsletters";
+import { normalizeFormatId } from "./newsletterFormats";
 
 type StoredArticle = {
   slug: string;
@@ -1347,12 +1348,16 @@ export async function fetchSubscriberFormats(emailField: unknown): Promise<Recor
     { email },
     { projection: { letterFormats: 1 } },
   );
+  // Stored values may be legacy ids ("daily", "classic", …) — normalise on
+  // read so existing preferences map onto the new format set.
   return Object.fromEntries(
-    Object.entries(doc?.letterFormats ?? {}).filter(
-      ([id, fmt]) =>
-        NEWSLETTERS.some((item) => item.id === id) &&
-        EMAIL_FORMATS.some((f) => f.id === fmt),
-    ),
+    Object.entries(doc?.letterFormats ?? {})
+      .filter(
+        ([id, fmt]) =>
+          NEWSLETTERS.some((item) => item.id === id) &&
+          EMAIL_FORMATS.some((f) => f.id === normalizeFormatId(String(fmt))),
+      )
+      .map(([id, fmt]) => [id, normalizeFormatId(String(fmt))]),
   );
 }
 
@@ -1371,13 +1376,14 @@ export async function setSubscriberFormat(
   if (!NEWSLETTERS.some((item) => item.id === letter)) {
     return { error: "Unknown newsletter." };
   }
-  if (!EMAIL_FORMATS.some((item) => item.id === format)) {
+  const formatId = normalizeFormatId(format);
+  if (!EMAIL_FORMATS.some((item) => item.id === formatId)) {
     return { error: "Unknown format." };
   }
   await collections.subscribers.updateOne(
     { email },
     {
-      $set: { [`letterFormats.${letter}`]: format },
+      $set: { [`letterFormats.${letter}`]: formatId },
       $setOnInsert: { email, subscribedAt: new Date() },
     },
     { upsert: true },
@@ -1576,7 +1582,9 @@ export async function fetchSubscriberDashboard(): Promise<AdminSubscriber[]> {
           name: letter?.name ?? id,
           cadence: letter?.cadence ?? "",
 
-          formatName: EMAIL_FORMATS.find((item) => item.id === fmtId)?.name ?? EMAIL_FORMATS[0].name,
+          formatName:
+            EMAIL_FORMATS.find((item) => item.id === (fmtId ? normalizeFormatId(fmtId) : EMAIL_FORMATS[0].id))
+              ?.name ?? EMAIL_FORMATS[0].name,
           status,
           ...(issue
             ? { sentAt: issue.sentAt.toISOString() }

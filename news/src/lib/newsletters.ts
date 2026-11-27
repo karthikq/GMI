@@ -1,26 +1,15 @@
 // The newsletters readers can subscribe to. `id` is stored on the subscriber's
 // `letters` array in Mongo, so keep ids stable once they ship.
 
-// Email template options for the example-email preview. The first entry is the
-// default and the only free format; every other format is a paid plan perk.
-// `id` is stored in the subscriber's `letterFormats` map, so keep ids stable.
-export type EmailFormat = {
-  id: string;
-  name: string;
-  style: string;
-  premium: boolean;
-};
-
-export const EMAIL_FORMATS: EmailFormat[] = [
-  { id: "daily", name: "Daily Edition", style: "Black & white front page", premium: false },
-  { id: "classic", name: "Classic Broadsheet", style: "Vintage front page", premium: true },
-  { id: "corporate", name: "Corporate Report", style: "White, navy & orange business", premium: true },
-  { id: "heritage", name: "Heritage Print", style: "Old-school club gazette", premium: true },
-  { id: "scrapbook", name: "Scrapbook Post", style: "Collage & sticky notes", premium: true },
-  { id: "storefront", name: "Storefront Weekly", style: "Modern promo magazine", premium: true },
-  { id: "skyline", name: "Skyline Dispatch", style: "Dark navy company summary", premium: true },
-  { id: "digest", name: "Modern Digest", style: "Clean numbered briefing", premium: true },
-];
+// Email format options live in newsletterFormats.ts — the eight editorial
+// formats (QUICK_READ, DAILY_DIGEST, FULL_EDITION, VISUAL_EDITION, DEEP_DIVE,
+// DATA_BRIEF, READERS_EDITION, MINIMALIST). `daily_digest` is the default and
+// the only free format; the rest are a paid-plan perk. Legacy ids stored on
+// older templates/subscribers migrate via normalizeFormatId().
+export {
+  NEWSLETTER_FORMATS as EMAIL_FORMATS,
+  type NewsletterFormat as EmailFormat,
+} from "./newsletterFormats";
 
 // The issue date shown in email previews, computed from the cadence so it
 // always reads as a real upcoming issue, e.g. "FRI, NOV 28, 2026".

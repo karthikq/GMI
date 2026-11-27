@@ -12,7 +12,7 @@ const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017";
 const dbName = process.env.MONGODB_DB || "meridian";
 
 const tz = "Asia/Kolkata";
-const FMTS = ["daily", "classic", "corporate", "heritage", "scrapbook", "storefront", "skyline", "digest"];
+const FMTS = ["daily_digest", "quick_read", "full_edition", "visual_edition", "deep_dive", "data_brief", "readers_edition", "minimalist"];
 
 const LEGACY = [
   ["briefing", "The Morning Briefing", "Weekdays before 7am", { kind: "weekdays", time: "07:30", timeZone: tz }, ["World", "Business", "Culture"], false, true],
@@ -58,12 +58,13 @@ try {
     cadence,
     schedule,
     topics,
-    articleCount: 6,
+    articleCount: 7,
     formats: FMTS,
+    defaultFormat: "daily_digest",
     premium: x === true,
     active: typeof active === "boolean" ? active : false,
     onEmpty: "send-with-fallback",
-    minArticles: 1,
+    minArticles: 5,
     createdAt: now,
     updatedAt: now,
   });
@@ -89,12 +90,13 @@ try {
           schedule: { kind: "weekly", dayOfWeek: 1, time: "07:30", timeZone: tz },
           topics: [id],
           deskSlug: id,
-          articleCount: 6,
+          articleCount: 7,
           formats: FMTS,
+          defaultFormat: "daily_digest",
           premium: true,
           active: true,
           onEmpty: "send-with-fallback",
-          minArticles: 1,
+          minArticles: 5,
           createdAt: now,
           updatedAt: now,
         },

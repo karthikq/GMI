@@ -13,6 +13,7 @@ import {
 import { editionIssueHtml, sendEditionEmail } from "./email";
 import { getTemplates, pickEditionArticles } from "./deliveryEngine";
 import { newsletterForTemplate, type LetterTemplate } from "./letterTemplates";
+import { normalizeFormatId } from "./newsletterFormats";
 import { io } from "next/cache";
 
 // ── Templates ──────────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ export async function subscriberCounts(): Promise<Record<string, number>> {
 
 // The edition this template would produce right now — for preview/test send.
 async function draftEdition(template: LetterTemplate) {
-  const slugs = await pickEditionArticles(template);
+  const picks = await pickEditionArticles(template);
   const label = new Intl.DateTimeFormat("en-GB", {
     weekday: "short",
     day: "numeric",
@@ -67,11 +68,12 @@ async function draftEdition(template: LetterTemplate) {
   })
     .format(new Date())
     .toUpperCase();
-  return { editionDate: label, articleSlugs: slugs };
+  return { editionDate: label, articleSlugs: picks.slugs, insufficient: picks.insufficient, reason: picks.reason };
 }
 
 export async function previewTemplate(
   id: string,
+  format?: string,
 ): Promise<{ ok: true; subject: string; html: string } | { error: string }> {
   const template = (await getTemplates()).find((item) => item.id === id);
   if (!template) return { error: "Unknown newsletter." };
@@ -80,32 +82,91 @@ export async function previewTemplate(
   const html = await editionIssueHtml(
     newsletterForTemplate(template),
     edition,
-    "daily",
+    normalizeFormatId(format ?? template.defaultFormat),
     `${siteUrl}/logo.png`,
     siteUrl,
     `${siteUrl}/newsletters`,
+    template,
   );
-  return { ok: true, subject: `${template.name} — ${edition.editionDate}`, html };
+  const flag = edition.insufficient ? " [insufficient content]" : "";
+  return { ok: true, subject: `${template.name} — ${edition.editionDate}${flag}`, html };
+}
+
+// Test sends go only to authorised recipients — registered admin/editor
+// accounts — so a leaked admin session can't blast arbitrary addresses.
+export async function isAuthorisedTestRecipient(email: string): Promise<boolean> {
+  await connect();
+  const user = await collections.users.findOne(
+    { email: email.toLowerCase() },
+    { projection: { role: 1 } },
+  );
+  const role = String(user?.role ?? "");
+  return role === "admin" || role === "editor";
 }
 
 export async function sendTestEdition(
   id: string,
   email: string,
+  format?: string,
 ): Promise<{ ok: true; message: string } | { error: string }> {
   const template = (await getTemplates()).find((item) => item.id === id);
   if (!template) return { error: "Unknown newsletter." };
+  if (!(await isAuthorisedTestRecipient(email))) {
+    return { error: "Test emails can only go to registered admin or editor accounts." };
+  }
   const edition = await draftEdition(template);
   const result = await sendEditionEmail({
     to: email,
     letter: newsletterForTemplate(template),
     edition: { id: "test", editionDate: edition.editionDate, articleSlugs: edition.articleSlugs },
-    format: "daily",
+    format: normalizeFormatId(format ?? template.defaultFormat),
     deliveryId: `test-${id}`,
     letterId: template.id,
+    template,
   });
   if (result.outcome === "sent") return { ok: true, message: `Test sent to ${email}.` };
   if (result.outcome === "skipped") return { error: result.detail ?? "Email provider not configured." };
   return { error: result.detail ?? "The provider rejected the test send." };
+}
+
+// Manual review for insufficient-content editions: append eligible published
+// articles and mark the edition ready so deliveries can proceed.
+export async function updateEditionArticles(
+  editionId: string,
+  addSlugs: string[],
+): Promise<{ ok: true; articleCount: number } | { error: string }> {
+  await connect();
+  if (!ObjectId.isValid(editionId)) return { error: "Unknown edition." };
+  const edition = await collections.letterEditions.findOne({ _id: new ObjectId(editionId) });
+  if (!edition) return { error: "Unknown edition." };
+  const clean = [...new Set(addSlugs.map((s) => String(s).trim()).filter(Boolean))].slice(0, 20);
+  if (!clean.length) return { error: "No article slugs to add." };
+  const found = await collections.articles
+    .find({ slug: { $in: clean }, publishedAt: { $lte: new Date() } }, { projection: { slug: 1 } })
+    .toArray();
+  const eligible = found.map((doc) => String(doc.slug)).filter((slug) => !edition.articleSlugs.includes(slug));
+  if (!eligible.length) return { error: "None of those are published articles not already in the edition." };
+  const slugs = [...edition.articleSlugs, ...eligible];
+  await collections.letterEditions.updateOne(
+    { _id: edition._id },
+    {
+      $set: {
+        articleSlugs: slugs,
+        articleCount: slugs.length,
+        status: "ready",
+        updatedAt: new Date(),
+      },
+      $unset: { insufficient: "", skipReason: "" },
+    },
+  );
+  // Re-queue the deliveries the content shortage skipped so the reviewed
+  // edition actually goes out.
+  const now = new Date();
+  await collections.letterDeliveries.updateMany(
+    { editionId: edition._id, status: "SKIPPED" },
+    { $set: { status: "QUEUED", scheduledAt: now, updatedAt: now }, $unset: { skipReason: "" } },
+  );
+  return { ok: true, articleCount: slugs.length };
 }
 
 // ── Delivery centre queries ────────────────────────────────────────────────

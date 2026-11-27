@@ -23,12 +23,14 @@ export default function NewsletterCard({
   signedIn,
   premium,
   initialFormat,
+  supportedFormats,
 }: {
   letter: Newsletter;
   subscribed: boolean;
   signedIn: boolean;
   premium: boolean;
   initialFormat?: string;
+  supportedFormats?: string[];
 }) {
   const [on, setOn] = useState(subscribed);
   const [busy, setBusy] = useState(false);
@@ -153,6 +155,7 @@ export default function NewsletterCard({
           signedIn={signedIn}
           premium={premium}
           initialFormat={initialFormat}
+          supportedFormats={supportedFormats}
         />
       )}
     </article>

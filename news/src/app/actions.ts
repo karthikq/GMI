@@ -14,6 +14,7 @@ import { collections, connect } from "@/lib/db";
 import { deliverLetterNow } from "@/lib/delivery";
 import { sendNewsletterConfirmEmail, sendWelcomeEmail } from "@/lib/email";
 import { EMAIL_FORMATS, NEWSLETTERS } from "@/lib/newsletters";
+import { normalizeFormatId, normalizeFormatList } from "@/lib/newsletterFormats";
 import { PLANS } from "@/lib/plans";
 import { INVITABLE_ROLES, isEditorial, type Role } from "@/lib/roles";
 import {
@@ -156,13 +157,21 @@ export async function chooseEmailFormat(
   if (!NEWSLETTERS.some((item) => item.id === letter)) {
     return { error: "Unknown newsletter." };
   }
-  const found = EMAIL_FORMATS.find((item) => item.id === format);
+  const formatId = normalizeFormatId(format);
+  const found = EMAIL_FORMATS.find((item) => item.id === formatId);
   if (!found) return { error: "Unknown format." };
   if (found.premium && user.plan !== "premium" && user.plan !== "premium-plus") {
     return { error: "That's a premium format — upgrade your plan to use it." };
   }
   try {
-    const result = await setSubscriberFormat(user.email, letter, format);
+    // The newsletter's template decides which formats subscribers may pick —
+    // the modal hides the rest, this is the real check.
+    const { getTemplates } = await import("@/lib/deliveryEngine");
+    const template = (await getTemplates().catch(() => [])).find((t) => t.id === letter);
+    if (template && !normalizeFormatList(template.formats).includes(formatId)) {
+      return { error: "That format isn't enabled for this newsletter." };
+    }
+    const result = await setSubscriberFormat(user.email, letter, formatId);
     if ("ok" in result) refresh();
     return result;
   } catch {
@@ -962,15 +971,17 @@ export async function setLetterTemplateActive(input: {
   }
 }
 
-// Rendered preview of the next edition for a template (admin only).
+// Rendered preview of the next edition for a template (admin only). `format`
+// selects which of the eight renderers to use.
 export async function previewLetterTemplate(input: {
   id: string;
+  format?: string;
 }): Promise<{ error: string } | { ok: true; subject: string; html: string }> {
   const user = await getSessionUser();
   if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage newsletters." };
   try {
     const { previewTemplate } = await import("@/lib/newsletterAdmin");
-    return await previewTemplate(String(input.id));
+    return await previewTemplate(String(input.id), input.format ? String(input.format) : undefined);
   } catch {
     return { error: "Couldn't build the preview." };
   }
@@ -980,6 +991,7 @@ export async function previewLetterTemplate(input: {
 export async function sendTestLetter(input: {
   id: string;
   email: string;
+  format?: string;
 }): Promise<{ ok: true; message: string } | { error: string }> {
   const user = await getSessionUser();
   if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage newsletters." };
@@ -987,11 +999,36 @@ export async function sendTestLetter(input: {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "Enter a valid test address." };
   try {
     const { sendTestEdition } = await import("@/lib/newsletterAdmin");
-    const result = await sendTestEdition(String(input.id), email);
+    const result = await sendTestEdition(
+      String(input.id),
+      email,
+      input.format ? String(input.format) : undefined,
+    );
     if ("ok" in result) await recordAudit(user, "template.test-send", String(input.id), email);
     return result;
   } catch {
     return { error: "Couldn't send the test email." };
+  }
+}
+
+// Add published articles to an insufficient-content edition after review.
+export async function reviewEditionArticles(input: {
+  editionId: string;
+  slugs: string[];
+}): Promise<{ ok: true; articleCount: number } | { error: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage newsletters." };
+  try {
+    const { updateEditionArticles } = await import("@/lib/newsletterAdmin");
+    const slugs = Array.isArray(input.slugs) ? input.slugs.map(String) : [];
+    const result = await updateEditionArticles(String(input.editionId), slugs);
+    if ("ok" in result) {
+      await recordAudit(user, "edition.review", String(input.editionId), slugs.join(","));
+      revalidatePath("/admin/newsletters", "page");
+    }
+    return result;
+  } catch {
+    return { error: "Couldn't update the edition. Try again." };
   }
 }
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import DeliveryCentre from "@/components/admin/DeliveryCentre";
+import EditionReview from "@/components/admin/EditionReview";
 import DeliveryDetail from "@/components/admin/DeliveryDetail";
 import SchedulerPanel from "@/components/admin/SchedulerPanel";
 import TemplateManager from "@/components/admin/TemplateManager";
@@ -237,6 +238,7 @@ async function Editions({ page, templateId, editionId }: { page: number; templat
               <th>Stories</th>
               <th>Scheduled</th>
               <th>Created</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -247,16 +249,26 @@ async function Editions({ page, templateId, editionId }: { page: number; templat
                 <td>{row.periodKey}</td>
                 <td>
                   <StatusChip status={row.status.toUpperCase()} />
+                  {row.insufficient ? <span className="nc-flag">insufficient content</span> : null}
                   {row.skipReason ? <small className="nc-reason">{row.skipReason}</small> : null}
                 </td>
                 <td>{row.articleCount}</td>
                 <td>{fmtTime(row.scheduledAt)}</td>
                 <td>{fmtTime(row.createdAt)}</td>
+                <td>
+                  {row.insufficient ? (
+                    <EditionReview
+                      editionId={String(row._id)}
+                      slugs={row.articleSlugs}
+                      {...(row.skipReason ? { reason: row.skipReason } : {})}
+                    />
+                  ) : null}
+                </td>
               </tr>
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={7}>No editions generated yet — they appear after the first scheduler run.</td>
+                <td colSpan={8}>No editions generated yet — they appear after the first scheduler run.</td>
               </tr>
             )}
           </tbody>
