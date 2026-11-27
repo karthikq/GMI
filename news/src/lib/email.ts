@@ -355,7 +355,7 @@ async function sendViaBrevo(
     body: JSON.stringify({
       sender: {
         name: process.env.BREVO_SENDER_NAME ?? "Good Morning Indian",
-        email: process.env.BREVO_SENDER_EMAIL ?? "jskarthik10@gmail.com",
+        email: process.env.BREVO_SENDER_EMAIL ?? "support@goodmorningindian.com",
       },
       to: [{ email: to, ...(name ? { name } : {}) }],
       subject,

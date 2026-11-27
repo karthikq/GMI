@@ -13,6 +13,8 @@ import {
   fetchMarketViews,
   fetchMarkets,
   fetchNavSections,
+  fetchSavedSlugs,
+  fetchSectionBundle,
   fetchSections,
   fetchSectionTree,
   fetchTicker,
@@ -65,6 +67,10 @@ export type Article = {
   authorBio?: string;
   caption?: string;
   tags?: string[];
+  // Editorial flags surfaced to layout blocks.
+  featured?: boolean;
+  premium?: boolean;
+  photoCount?: number;
 };
 
 export type Weather = {
@@ -185,6 +191,13 @@ export const getMarkets = () => get(fetchMarkets);
 export const getMarketViews = () => get(fetchMarketViews);
 export const getMarketDetail = (slug: string, range: MarketRange) => get(() => fetchMarketDetail(slug, range));
 export const getHome = () => get(fetchHome);
+export const getSectionBundle = (params: {
+  sectionSlug: string;
+  subsectionSlug?: string;
+  page?: number;
+}) => get(() => fetchSectionBundle(params));
+export const getSavedSlugs = (userId: string, slugs: string[]) =>
+  get(() => fetchSavedSlugs(userId, slugs));
 
 export const getArticle = (slug: string, viewerId?: string) => get(() => fetchArticle(slug, viewerId));
 export const getEditableArticle = (slug: string, userId: string) => get(() => fetchEditableArticle(slug, userId));

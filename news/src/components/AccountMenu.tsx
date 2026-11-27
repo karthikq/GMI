@@ -21,6 +21,7 @@ type AccountMenuProps = {
   plan?: PlanSummary;
   canViewAnalytics?: boolean;
   canViewSubscribers?: boolean;
+  canManageLayouts?: boolean;
 };
 
 const SUB_STATUS: Record<string, string> = {
@@ -41,6 +42,7 @@ export default function AccountMenu({
   plan,
   canViewAnalytics,
   canViewSubscribers,
+  canManageLayouts,
 }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
@@ -150,6 +152,16 @@ export default function AccountMenu({
                   onClick={() => setOpen(false)}
                 >
                   Subscribers
+                </Link>
+              )}
+              {canManageLayouts && (
+                <Link
+                  href="/admin/layouts"
+                  className="account-menu-item"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                >
+                  Section layouts
                 </Link>
               )}
               {plan && (

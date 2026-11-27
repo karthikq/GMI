@@ -1,6 +1,7 @@
 import { MongoClient, type Document, type ObjectId } from "mongodb";
 import { io } from "next/cache";
 import { articles, markets, sections, subsections, tickerSlugs } from "./data";
+import { defaultSectionConfig, type CollectionsConfig, type LayoutBlock } from "./layouts";
 
 const HOUR = 60 * 60 * 1000;
 
@@ -54,6 +55,18 @@ export type CategoryDoc = Document & {
   updatedAt?: Date;
 };
 
+// One document per section (subsectionSlug null) or per subsection override —
+// the editorial block program the section page renders. Documents missing
+// entirely fall back to defaultSectionConfig() at read time.
+export type LayoutDoc = Document & {
+  sectionSlug: string;
+  subsectionSlug: string | null;
+  blocks: LayoutBlock[];
+  collections: CollectionsConfig;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
 export const collections = {
   sections: db.collection<CategoryDoc>("sections"),
   articles: db.collection("articles"),
@@ -66,6 +79,7 @@ export const collections = {
   reads: db.collection("reads"),
   invites: db.collection("invites"),
   settings: db.collection<{ _id: string; value: string }>("settings"),
+  layouts: db.collection<LayoutDoc>("layouts"),
 };
 
 // Replaces sections, articles and markets with the sample data. Subscribers are kept.
@@ -164,6 +178,31 @@ async function upsertCategoryTree() {
   await Promise.all(writes);
 }
 
+// Writes the stock block program for every canonical section exactly once —
+// $setOnInsert means admin layout edits are never clobbered on re-runs.
+async function upsertLayoutDefaults() {
+  const now = new Date();
+  await Promise.all(
+    sections.map((section) => {
+      const config = defaultSectionConfig(section.slug, section.name);
+      return collections.layouts.updateOne(
+        { sectionSlug: section.slug, subsectionSlug: null },
+        {
+          $setOnInsert: {
+            sectionSlug: section.slug,
+            subsectionSlug: null,
+            blocks: config.blocks,
+            collections: config.collections,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        { upsert: true },
+      );
+    }),
+  );
+}
+
 let ready: Promise<void> | null = null;
 
 export async function connect(): Promise<void> {
@@ -172,7 +211,7 @@ export async function connect(): Promise<void> {
   await io();
   ready ??= (async () => {
     await client.connect();
-    const { sections: sectionCollection, articles, subscribers, deliveries, users, sessions, bookmarks, reads, invites } = collections;
+    const { sections: sectionCollection, articles, subscribers, deliveries, users, sessions, bookmarks, reads, invites, layouts } = collections;
     // The original global unique slug index predates subsections — two
     // different sections may now own a child with the same slug, so
     // uniqueness is enforced per parent instead.
@@ -206,6 +245,7 @@ export async function connect(): Promise<void> {
       reads.createIndex({ userId: 1, slug: 1 }, { unique: true }),
       reads.createIndex({ userId: 1, readAt: -1 }),
       invites.createIndex({ email: 1 }, { unique: true }),
+      layouts.createIndex({ sectionSlug: 1, subsectionSlug: 1 }, { unique: true }),
     ]);
     if ((await articles.estimatedDocumentCount()) === 0) {
       const counts = await seed();
@@ -215,6 +255,7 @@ export async function connect(): Promise<void> {
     // section/subsection tree so new categories appear without touching
     // stored stories or admin-made edits.
     await upsertCategoryTree();
+    await upsertLayoutDefaults();
   })();
   return ready;
 }

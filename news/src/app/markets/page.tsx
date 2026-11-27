@@ -23,10 +23,10 @@ async function MarketsContent() {
       <header className="page-head">
         <h1>Markets</h1>
         <p>Indices and commodities · daily closes, last three months</p>
+        {section?.children?.length ? (
+          <SubsectionNav section={section} items={section.children} />
+        ) : null}
       </header>
-      {section?.children?.length ? (
-        <SubsectionNav section={section} items={section.children} />
-      ) : null}
       <MarketGroup title="Indices" markets={markets.filter((m) => !m.commodity)} />
       <MarketGroup title="Commodities" markets={markets.filter((m) => m.commodity)} />
       {stories && stories.articles.length > 0 && (

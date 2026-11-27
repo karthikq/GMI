@@ -22,13 +22,18 @@ import {
   createCashfreeSubscription,
 } from "@/lib/cashfree";
 import { recordRead, recordView, toggleBookmark } from "@/lib/reading";
+import { sanitizeLayoutInput } from "@/lib/layouts";
 import {
   deleteArticle,
   deleteCategory,
+  fetchSectionBundle,
+  fetchSectionTree,
   insertArticle,
   insertCategory,
   insertSubscriber,
   moveCategory,
+  resetLayoutConfig,
+  saveLayoutConfig,
   searchArticles as searchArticleDocs,
   setNewsletterSubscription,
   setSubscriberFormat,
@@ -39,6 +44,7 @@ import {
   type CategoryInput,
 } from "@/lib/queries";
 import type { ArticleInput } from "@/lib/queries";
+import type { Section } from "@/lib/api";
 
 export type { ArticleInput };
 export type RelatedPick = { slug: string; title: string; sectionName: string };
@@ -729,5 +735,117 @@ export async function updateProfile(input: {
     );
   } catch {
     return { message: "Couldn't save your profile. Try again." };
+  }
+}
+
+// ── Section layout management ──────────────────────────────────────────────
+// Admins and editors edit the block program of a section or subsection.
+
+const layoutRole = (role?: string) => role === "admin" || role === "editor";
+
+const cleanSectionSlug = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 80);
+
+// Resolves and validates the target scope against the live category tree.
+async function layoutScope(
+  sectionSlug: string,
+  subsectionSlug: string | null,
+): Promise<{ section: Section; subsectionSlug: string | null } | { error: string }> {
+  const tree = await fetchSectionTree();
+  const section = tree.find((item) => item.slug === sectionSlug);
+  if (!section) return { error: "Unknown section." };
+  if (subsectionSlug && !section.children?.some((child) => child.slug === subsectionSlug)) {
+    return { error: "Unknown subsection." };
+  }
+  return { section, subsectionSlug };
+}
+
+export async function saveSectionLayout(input: {
+  sectionSlug: string;
+  subsectionSlug?: string | null;
+  blocks: unknown;
+  collections: unknown;
+}): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!layoutRole(user?.role)) {
+    return { error: "Only admins and editors can manage layouts." };
+  }
+  const sectionSlug = cleanSectionSlug(input.sectionSlug);
+  const subsectionSlug = input.subsectionSlug ? cleanSectionSlug(input.subsectionSlug) : null;
+  const scope = await layoutScope(sectionSlug, subsectionSlug);
+  if ("error" in scope) return scope;
+  const validSubs = (scope.section.children ?? []).map((child) => child.slug);
+  const clean = sanitizeLayoutInput(
+    { blocks: input.blocks, collections: input.collections },
+    validSubs,
+  );
+  if ("error" in clean) return clean;
+  try {
+    const result = await saveLayoutConfig(sectionSlug, subsectionSlug, clean);
+    if ("ok" in result) revalidatePath(`/${sectionSlug}`, "page");
+    return result;
+  } catch {
+    return { error: "Couldn't save the layout. Try again." };
+  }
+}
+
+export async function resetSectionLayout(input: {
+  sectionSlug: string;
+  subsectionSlug?: string | null;
+}): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!layoutRole(user?.role)) {
+    return { error: "Only admins and editors can manage layouts." };
+  }
+  const sectionSlug = cleanSectionSlug(input.sectionSlug);
+  const subsectionSlug = input.subsectionSlug ? cleanSectionSlug(input.subsectionSlug) : null;
+  const scope = await layoutScope(sectionSlug, subsectionSlug);
+  if ("error" in scope) return scope;
+  try {
+    const result = await resetLayoutConfig(sectionSlug, subsectionSlug);
+    if ("ok" in result) revalidatePath(`/${sectionSlug}`, "page");
+    return result;
+  } catch {
+    return { error: "Couldn't reset the layout. Try again." };
+  }
+}
+
+// The resolved block program for the admin preview pane — same pipeline the
+// public page uses, so what editors see is what readers get.
+export async function previewSectionLayout(input: {
+  sectionSlug: string;
+  subsectionSlug?: string | null;
+  blocks?: unknown;
+  collections?: unknown;
+}): Promise<{ error: string } | Awaited<ReturnType<typeof fetchSectionBundle>>> {
+  const user = await getSessionUser();
+  if (!layoutRole(user?.role)) return { error: "Only admins and editors can manage layouts." };
+  const sectionSlug = cleanSectionSlug(input.sectionSlug);
+  const subsectionSlug = input.subsectionSlug ? cleanSectionSlug(input.subsectionSlug) : undefined;
+  try {
+    // A submitted draft is validated then resolved directly — the preview
+    // shows exactly what saving would publish.
+    if (input.blocks !== undefined) {
+      const scope = await layoutScope(sectionSlug, subsectionSlug ?? null);
+      if ("error" in scope) return scope;
+      const validSubs = (scope.section.children ?? []).map((child) => child.slug);
+      const clean = sanitizeLayoutInput(
+        { blocks: input.blocks, collections: input.collections },
+        validSubs,
+      );
+      if ("error" in clean) return clean;
+      return await fetchSectionBundle({
+        sectionSlug,
+        subsectionSlug,
+        page: 1,
+        config: { sectionSlug, ...(subsectionSlug ? { subsectionSlug } : {}), ...clean },
+      });
+    }
+    return await fetchSectionBundle({ sectionSlug, subsectionSlug, page: 1 });
+  } catch {
+    return { error: "Couldn't load the preview." };
   }
 }

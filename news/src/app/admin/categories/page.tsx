@@ -38,6 +38,9 @@ async function CategoriesContent() {
           category hides it and its stories without losing them.{" "}
           <Link href="/admin" className="more">
             Newsletter admin →
+          </Link>{" "}
+          <Link href="/admin/layouts" className="more">
+            Section layouts →
           </Link>
         </p>
       </header>

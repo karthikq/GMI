@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation";
 import SectionListing from "@/components/SectionListing";
 import { Offline } from "@/components/States";
-import { getCategoryArticles, getSectionTree } from "@/lib/api";
+import { getSavedSlugs, getSectionBundle, getSectionTree } from "@/lib/api";
+import { getSessionUser } from "@/lib/auth";
 
+// Kept for the markets/[slug] fallback that sizes its feed the same way.
 export const CATEGORY_PAGE_SIZE = 25;
 
 // Shared body of /[section]/[subsection] and the markets/[slug] fallback —
-// resolves the category pair, then renders the standard listing.
+// resolves the category pair, then renders the configured block program
+// scoped to the subsection.
 export default async function SubsectionPage({
   sectionSlug,
   subsectionSlug,
@@ -16,29 +19,30 @@ export default async function SubsectionPage({
   subsectionSlug: string;
   page: number;
 }) {
-  const [tree, result] = await Promise.all([
+  const [tree, bundle, user] = await Promise.all([
     getSectionTree(),
-    getCategoryArticles({
-      sectionSlug,
-      subsectionSlug,
-      limit: CATEGORY_PAGE_SIZE,
-      offset: (page - 1) * CATEGORY_PAGE_SIZE,
-    }),
+    getSectionBundle({ sectionSlug, subsectionSlug, page }),
+    getSessionUser(),
   ]);
   if (!tree) return <Offline />;
   const section = tree.find((item) => item.slug === sectionSlug);
   const subsection = section?.children?.find((item) => item.slug === subsectionSlug);
   if (!section || !subsection) notFound();
-  if (!result) return <Offline />;
+  if (!bundle) return <Offline />;
+  const slugs = [
+    ...bundle.blocks.flatMap((block) => block.articles.map((article) => article.slug)),
+    ...(bundle.feed?.articles.map((article) => article.slug) ?? []),
+  ];
+  const saved = user ? await getSavedSlugs(user.id, slugs) : null;
   return (
     <SectionListing
       section={section}
       subsection={subsection}
       items={section.children ?? []}
-      articles={result.articles}
-      total={result.total}
+      bundle={bundle}
       page={page}
-      perPage={CATEGORY_PAGE_SIZE}
+      signedIn={Boolean(user)}
+      savedSlugs={new Set(saved ?? [])}
     />
   );
 }

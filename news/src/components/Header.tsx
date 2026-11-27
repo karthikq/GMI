@@ -79,6 +79,7 @@ async function NavAccount() {
       variant="nav"
       canViewAnalytics={isEditorial(user?.role)}
       canViewSubscribers={user?.role === "admin"}
+      canManageLayouts={user?.role === "admin" || user?.role === "editor"}
       plan={
         user
           ? {
