@@ -52,6 +52,7 @@ export default function NewsletterSampleModal({
   premium,
   initialFormat,
   supportedFormats,
+  startInPreview,
 }: {
   letter: Newsletter;
   onClose: () => void;
@@ -60,6 +61,8 @@ export default function NewsletterSampleModal({
   initialFormat?: string;
   // Formats the newsletter's template enables — defaults to all eight.
   supportedFormats?: string[];
+  // Open straight into the full-edition preview instead of the picker grid.
+  startInPreview?: boolean;
 }) {
   const formats = supportedFormats?.length
     ? EMAIL_FORMATS.filter((item) => supportedFormats.includes(item.id))
@@ -68,7 +71,7 @@ export default function NewsletterSampleModal({
     formats.find((item) => item.id === initialFormat)?.id ?? formats[0].id;
   const [format, setFormat] = useState(initial);
   const [saved, setSaved] = useState(initial);
-  const [previewing, setPreviewing] = useState(false);
+  const [previewing, setPreviewing] = useState(Boolean(startInPreview));
   const [note, setNote] = useState<{ kind: "ok" | "error"; text: React.ReactNode } | null>(null);
   const [pending, startTransition] = useTransition();
   const active = formats.find((item) => item.id === format) ?? formats[0];

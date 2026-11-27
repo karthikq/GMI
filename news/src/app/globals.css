@@ -3466,311 +3466,6 @@ a.tag.solid:hover {
   color: var(--live);
 }
 
-/* Newsletter editions (/newsletters): each card is a mini masthead. */
-
-.letters-note {
-  margin: -10px 0 36px;
-  font-size: 14px;
-  color: var(--ink-mute);
-}
-
-.letters-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
-  align-items: stretch;
-}
-
-.letter-card {
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-top: 3px solid var(--ink);
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.letter-card:hover {
-  transform: translateY(-4px);
-  border-top-color: var(--accent);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="dark"] .letter-card:hover {
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
-}
-
-.letter-card.featured:hover {
-  border-top-color: var(--accent);
-}
-
-.letter-card.subscribed {
-  border-top-color: var(--up);
-}
-
-/* Locked premium editions: frosted tint over the content, the Upgrade button
-   stays crisp underneath. */
-.letter-card.locked {
-  background: color-mix(in srgb, var(--surface) 70%, var(--line));
-}
-
-.letter-body {
-  position: relative;
-}
-
-.letter-veil {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--paper) 62%, transparent),
-    color-mix(in srgb, var(--paper) 88%, transparent)
-  );
-  backdrop-filter: blur(2.5px) saturate(0.7);
-  /* Preview still opens — the veil is visual only. */
-  pointer-events: none;
-}
-
-.letter-veil svg {
-  color: var(--ink-soft);
-}
-
-.letter-veil span {
-  font: 500 10px var(--font-mono), monospace;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.letter-card.featured {
-  background: var(--panel);
-  border-color: var(--panel);
-  color: #f5f4f0;
-}
-
-.letter-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-  font: 500 10px var(--font-mono), monospace;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.letter-card.featured .letter-top {
-  border-color: #2f3640;
-  color: #8a929d;
-}
-
-/* Send schedule — highlighted so readers see when the edition lands. */
-.letter-cadence {
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.letter-card.featured .letter-cadence {
-  background: color-mix(in srgb, #f5f4f0 12%, transparent);
-  color: #f5f4f0;
-}
-
-.letter-name {
-  margin: 16px 0 8px;
-  font-size: clamp(26px, 2.4vw, 32px);
-  font-weight: 700;
-  line-height: 1.05;
-}
-
-.letter-topics {
-  font: 500 10.5px var(--font-mono), monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-/* Small "Premium" pill — marks paid editions on cards and profile prefs. */
-.letter-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 8px;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font: 700 9px var(--font-mono), monospace;
-  font-style: normal;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  vertical-align: middle;
-}
-
-.letter-blurb {
-  margin: 12px 0 10px;
-  font-size: 14px;
-  color: var(--ink-soft);
-}
-
-.letter-card.featured .letter-blurb {
-  color: #b4bac5;
-}
-
-.letter-sample-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  margin-bottom: 20px;
-  border: 0;
-  background: none;
-  font: 600 13px var(--font-sans), system-ui, sans-serif;
-  color: var(--ink-mute);
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.letter-sample-btn svg {
-  flex: none;
-  opacity: 0.75;
-  transition:
-    transform 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.letter-sample-btn:hover {
-  color: var(--accent);
-}
-
-.letter-sample-btn:hover svg {
-  transform: translateY(-1px);
-  opacity: 1;
-}
-
-.letter-card.featured .letter-sample-btn {
-  color: #8a929d;
-}
-
-.letter-card.featured .letter-sample-btn:hover {
-  color: #f5f4f0;
-}
-
-/* Subscribed readers pick a delivery time; sits under "Choose format". */
-.letter-time {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: -12px 0 20px;
-  font: 600 13px var(--font-sans), system-ui, sans-serif;
-  color: var(--ink-mute);
-}
-
-.letter-time svg {
-  flex: none;
-  opacity: 0.75;
-}
-
-.letter-time input {
-  margin-left: auto;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--paper);
-  color: var(--ink);
-  font: 600 12px var(--font-mono), monospace;
-}
-
-.letter-time input:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
-.letter-card.featured .letter-time {
-  color: #8a929d;
-}
-
-.letter-card.featured .letter-time input {
-  color-scheme: dark; /* keeps the native clock icon visible on the dark card */
-  border-color: #2f3640;
-  background: #10141a;
-  color: #f5f4f0;
-}
-
-.letter-foot {
-  margin-top: auto;
-}
-
-.letter-foot .button {
-  width: 100%;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    box-shadow 0.15s,
-    transform 0.15s ease;
-}
-
-.letter-foot .button:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-/* "Subscribed ✓" fills on hover: dark in light mode, light in dark mode. */
-.letter-foot .button.outline:hover {
-  background: var(--ink);
-  color: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-
-.letter-card.featured .letter-foot .button.outline {
-  color: #f5f4f0;
-  box-shadow: inset 0 0 0 1px #3e4652;
-}
-
-.letter-card.featured .letter-foot .button.outline:hover {
-  background: #f5f4f0;
-  color: #14171c;
-  box-shadow: inset 0 0 0 1px #f5f4f0;
-}
-
-.letter-card .subscribe-row input {
-  height: 44px;
-  border-color: var(--line);
-  background: var(--paper);
-  color: var(--ink);
-}
-
-.letter-card .subscribe-row input:focus {
-  border-color: var(--accent);
-}
-
-.letter-card .subscribe-row .button {
-  width: auto;
-  height: 44px;
-  padding: 0 18px;
-}
-
-.letter-card .form-note.ok {
-  color: var(--up);
-}
-
-.letter-card .form-note.error {
-  color: var(--live);
-}
-
-/* Newsletter example email modal & broadsheet layout */
 
 .email-preview-wrap {
   width: 100%;
@@ -7451,7 +7146,6 @@ div[data-youtube-video][data-align="right"] {
   width: 100%;
   height: 560px;
 }
-.letter-time-block { margin-top: 10px; }
 .letter-time-reset {
   border: none;
   background: none;
@@ -7459,11 +7153,6 @@ div[data-youtube-video][data-align="right"] {
   color: var(--accent);
   cursor: pointer;
   padding: 0 0 0 6px;
-}
-.letter-time-note {
-  font-size: 11px;
-  color: var(--ink-soft);
-  margin: 4px 0 0;
 }
 @media (max-width: 760px) {
   .nc-filters { flex-direction: column; align-items: stretch; }
@@ -7771,4 +7460,567 @@ div[data-youtube-video][data-align="right"] {
 .nc-review-body input {
   flex: 1;
   min-width: 0;
+}
+
+/* ── Newsletters page (compact redesign) ────────────────────────────────── */
+
+.nl-head {
+  padding-bottom: 18px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.nl-title {
+  font-size: 36px;
+  line-height: 1.1;
+}
+
+.nl-lede {
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.nl-prefs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.nl-prefs-summary strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.nl-prefs-gear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.nl-prefs-gear:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.nl-prefs-panel {
+  flex-basis: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+/* Tabs */
+
+.nl-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 18px 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.nl-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.nl-tab:hover {
+  color: var(--ink);
+}
+
+.nl-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.nl-tab-count {
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  background: var(--band);
+  color: var(--ink-soft);
+}
+
+.nl-tab.active .nl-tab-count {
+  color: var(--accent);
+}
+
+.nl-section {
+  margin-top: 28px;
+}
+
+.nl-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.nl-section-head h2 {
+  font-size: 18px;
+}
+
+.nl-section-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.nl-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-mute);
+  background: var(--surface);
+}
+
+.nl-search input {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  width: 150px;
+  outline: none;
+}
+
+/* Shared bits */
+
+.nl-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.nl-cadence {
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.nl-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.nl-tier.free {
+  color: var(--up);
+}
+
+.nl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.nl-btn:hover:not(:disabled) {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+.nl-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.nl-btn.ghost {
+  color: var(--ink);
+  background: none;
+  border-color: var(--line);
+}
+
+.nl-btn.ghost:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: none;
+}
+
+.nl-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nl-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--up);
+}
+
+.nl-link {
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  cursor: pointer;
+}
+
+.nl-link:hover {
+  color: var(--accent-dark);
+}
+
+.nl-guest-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.nl-guest-form input[type="email"] {
+  flex: 1;
+  min-width: 160px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.nl-guest-form .form-note {
+  flex-basis: 100%;
+}
+
+.nl-empty {
+  padding: 20px;
+  font-size: 14px;
+  color: var(--ink-mute);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.nl-empty-block {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.nl-empty-block p {
+  margin: 0;
+}
+
+/* Featured (Morning Briefing) */
+
+.nl-feature {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+  margin-top: 20px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+}
+
+.nl-feature-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.nl-feature-name {
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.1;
+}
+
+.nl-feature-blurb {
+  margin: 8px 0 0;
+  max-width: 52ch;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.nl-feature-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.nl-illus {
+  width: 220px;
+}
+
+.nl-illus svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Compact flagship cards */
+
+.nl-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.nl-compact {
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.nl-compact-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.nl-compact-name {
+  margin-top: 12px;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.nl-compact-blurb {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  min-height: 40px;
+}
+
+.nl-compact-foot {
+  margin-top: 14px;
+}
+
+/* Desk rows */
+
+.nl-desk-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+
+.nl-desk {
+  border-bottom: 1px solid var(--line);
+}
+
+.nl-desk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 10px 0;
+}
+
+.nl-desk-toggle {
+  display: inline-flex;
+  padding: 6px;
+  color: var(--ink-mute);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.nl-desk-toggle:hover {
+  color: var(--accent);
+}
+
+.nl-desk-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+
+.nl-desk-row > .nl-cadence {
+  flex-shrink: 0;
+}
+
+.nl-desk-detail {
+  padding: 0 0 14px 56px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.nl-desk-detail p {
+  margin: 0;
+}
+
+.nl-desk-topics {
+  margin-top: 4px !important;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.nl-desk-error {
+  margin: 0 0 8px;
+}
+
+/* Manage modal */
+
+.nl-manage-desc {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.nl-manage-rows {
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.nl-manage-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.nl-manage-row dt {
+  color: var(--ink-mute);
+}
+
+.nl-manage-row dd {
+  margin: 0;
+  text-align: right;
+}
+
+.nl-manage-inline {
+  display: inline-flex;
+  gap: 12px;
+  margin-left: 12px;
+}
+
+.nl-manage-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.nl-manage-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--up);
+}
+
+.nl-manage-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+/* Responsive */
+
+@media (max-width: 960px) {
+  .nl-compact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nl-desk-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nl-feature {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nl-feature-side {
+    align-items: stretch;
+  }
+
+  .nl-illus {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+@media (max-width: 560px) {
+  .nl-compact-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nl-tabs {
+    overflow-x: auto;
+  }
+
+  .nl-desk-row .nl-cadence {
+    display: none;
+  }
 }

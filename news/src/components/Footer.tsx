@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { getNavSections } from "@/lib/api";
-import SubscribeForm from "./SubscribeForm";
+import NewsletterBanner from "./NewsletterBanner";
 
 async function FooterSections() {
   const sections = await getNavSections();
@@ -19,19 +19,9 @@ async function FooterSections() {
 export default function Footer() {
   return (
     <>
-      <section id="subscribe" className="newsletter">
-        <div className="container newsletter-inner">
-          <div>
-            <span className="kicker">The morning briefing</span>
-            <h2>The day, before it starts. In one email.</h2>
-            <p>
-              Every weekday before 7am: the five stories that matter, the markets at a glance and one
-              piece worth your full attention. No ads.
-            </p>
-          </div>
-          <SubscribeForm />
-        </div>
-      </section>
+      <Suspense fallback={null}>
+        <NewsletterBanner />
+      </Suspense>
 
       <footer className="footer">
         <div className="container footer-inner">
