@@ -8888,7 +8888,29 @@ div[data-youtube-video][data-align="right"] {
   margin-bottom: -2px;
   padding-bottom: 10px;
 }
-.nc-stats { margin: 0 0 22px; }
+.profile-stats.nc-stats {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  margin: 0 0 22px;
+  border-top: 1px solid var(--line);
+}
+.profile-stats.nc-stats div {
+  padding: 16px 14px 14px 0;
+}
+.profile-stats.nc-stats div + div {
+  padding-left: 14px;
+}
+.profile-stats.nc-stats dd {
+  font-size: 28px;
+  line-height: 1.05;
+}
+.profile-stats.nc-stats dd small {
+  display: block;
+  margin-top: 4px;
+  font: 600 10px/1.4 var(--font-mono), monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
 .nc-filters {
   display: flex;
   flex-wrap: wrap;
