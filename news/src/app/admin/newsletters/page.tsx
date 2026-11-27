@@ -344,7 +344,7 @@ function Settings() {
         <tbody>
           {row("Email provider", "Brevo (api.brevo.com/v3/smtp/email)")}
           {row("BREVO_API_KEY", process.env.BREVO_API_KEY ? "Configured" : "Not set — sends are skipped")}
-          {row("BREVO_SENDER", `${process.env.BREVO_SENDER_NAME ?? "Good Morning Indian"} <${process.env.BREVO_SENDER_EMAIL ?? "support@goodmorningindian.com"}>`)}
+          {row("BREVO_SENDER", `${process.env.BREVO_SENDER_NAME ?? "Good Morning Indian"} <${process.env.BREVO_SENDER_EMAIL ?? "jskarthik10@gmail.com"}>`)}
           {row("CRON_SECRET", process.env.CRON_SECRET ? "Configured — endpoint requires it" : "Not set — endpoint is open")}
           {row("BREVO_WEBHOOK_SECRET", process.env.BREVO_WEBHOOK_SECRET ? "Configured" : "Not set")}
           {row("Catch-up window", `${process.env.DELIVERY_CATCH_UP_HOURS ?? 24} hours`)}
