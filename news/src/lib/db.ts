@@ -72,12 +72,17 @@ export type LetterTemplateDoc = Document & {
   schedule: { kind: string; dayOfWeek?: number; time: string; timeZone: string };
   topics: string[];
   deskSlug?: string;
-  articleCount: number;
-  formats: string[];
+  articleCount: number; // target stories per edition (5–15, default 7)
+  formats: string[]; // current-format ids; legacy ids normalise at read time
+  defaultFormat?: string; // format used when a subscriber never picked one
   premium: boolean;
   active: boolean;
   onEmpty: "skip" | "send-with-fallback" | "hold";
   minArticles: number;
+  // Article-selection config (windows, desk fallback, premium, resend gap)
+  // and optional content blocks — see letterTemplates.ts for the shape.
+  selection?: Record<string, unknown>;
+  content?: Record<string, unknown>;
   createdAt?: Date;
   updatedAt?: Date;
 };
@@ -96,7 +101,23 @@ export type LetterEditionDoc = Document & {
   scheduledAt: Date; // template-level send instant (UTC)
   status: "ready" | "skipped" | "empty" | "hold";
   skipReason?: string;
+  // True when the picker couldn't reach the minimum five unique stories —
+  // surfaced in the admin dashboard for manual review.
+  insufficient?: boolean;
   createdAt: Date;
+};
+
+// A reader's answer to a newsletter poll or quiz — written by /engage pages
+// the Reader's Edition format links to.
+export type EngagementDoc = Document & {
+  kind: "poll" | "quiz";
+  letterId: string;
+  question: string;
+  option: number;
+  label: string;
+  correct?: boolean;
+  email?: string;
+  at: Date;
 };
 
 export type DeliveryStatus =
@@ -247,6 +268,7 @@ export const collections = {
   schedulerState: db.collection<SchedulerStateDoc>("schedulerState"),
   suppressions: db.collection<SuppressionDoc>("suppressions"),
   auditLog: db.collection<AuditDoc>("auditLog"),
+  engagements: db.collection<EngagementDoc>("engagements"),
 };
 
 // Replaces sections, articles and markets with the sample data. Subscribers are kept.
@@ -445,6 +467,7 @@ export async function connect(): Promise<void> {
       webhookEvents.createIndex({ messageId: 1 }),
       schedulerRuns.createIndex({ startedAt: -1 }),
       suppressions.createIndex({ email: 1 }, { unique: true }),
+      collections.engagements.createIndex({ letterId: 1, kind: 1, at: -1 }),
       auditLog.createIndex({ at: -1 }),
     ]);
     if ((await articles.estimatedDocumentCount()) === 0) {

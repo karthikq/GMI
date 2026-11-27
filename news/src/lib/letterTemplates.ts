@@ -6,6 +6,15 @@
 
 import { EMAIL_FORMATS, NEWSLETTERS, type Newsletter } from "./newsletters";
 import {
+  DEFAULT_ARTICLE_COUNT,
+  DEFAULT_FORMAT_ID,
+  MAX_ARTICLE_COUNT,
+  MIN_STORIES,
+  isKnownFormatId,
+  normalizeFormatId,
+  type NewsletterFormatId,
+} from "./newsletterFormats";
+import {
   SCHEDULE_KINDS,
   TIME_RE,
   scheduleFromCadence,
@@ -13,8 +22,19 @@ import {
   type Schedule,
   type ScheduleKind,
 } from "./scheduler";
+import type { SelectionConfig } from "./articleSelection";
 
 export type EmptyPolicy = "skip" | "send-with-fallback" | "hold";
+
+// Optional content blocks a template can carry. None of these count toward
+// the edition's minimum article count.
+export type TemplateContent = {
+  marketSnapshot?: boolean;
+  interestingFact?: string;
+  editorsNote?: string;
+  poll?: { question: string; options: string[] };
+  quiz?: { question: string; options: string[]; answer?: number };
+};
 
 export type LetterTemplate = {
   // Same id space as NEWSLETTERS (`letters[]` on subscribers references it).
@@ -25,13 +45,16 @@ export type LetterTemplate = {
   schedule: Schedule;
   topics: string[]; // editorial desks → sections used for content
   deskSlug?: string; // desk letters: the section slug they map to
-  articleCount: number;
-  formats: string[]; // EmailFormat ids the reader may pick
+  articleCount: number; // target stories per edition (5–15, default 7)
+  formats: string[]; // NewsletterFormat ids the reader may pick
+  defaultFormat: NewsletterFormatId; // format for subscribers who never chose
   premium: boolean;
   active: boolean;
   // What to do when the edition has fewer than minArticles fresh stories.
   onEmpty: EmptyPolicy;
-  minArticles: number;
+  minArticles: number; // floor before an edition is flagged insufficient
+  selection?: SelectionConfig; // article window/fallback/premium rules
+  content?: TemplateContent; // optional blocks (never counted as stories)
   createdAt?: Date;
   updatedAt?: Date;
 };
@@ -47,12 +70,14 @@ function fromConstant(letter: Newsletter): LetterTemplate {
     cadence: letter.cadence,
     schedule: { ...scheduleFromCadence(letter.cadence), time: "07:30" },
     topics: letter.topics,
-    articleCount: 6,
+    articleCount: DEFAULT_ARTICLE_COUNT,
     formats: DEFAULT_FORMATS,
+    defaultFormat: DEFAULT_FORMAT_ID,
     premium: Boolean(letter.premium),
     active: true,
     onEmpty: "send-with-fallback",
-    minArticles: 1,
+    minArticles: MIN_STORIES,
+    selection: { fallbackWindowsHours: [72, 168, 336, 720], excludeSentDays: 30 },
   };
 }
 
@@ -97,12 +122,14 @@ export function seedTemplates(): LetterTemplate[] {
       schedule: t.schedule,
       topics: t.topics,
       ...(t.deskSlug ? { deskSlug: t.deskSlug } : {}),
-      articleCount: 6,
+      articleCount: DEFAULT_ARTICLE_COUNT,
       formats: DEFAULT_FORMATS,
+      defaultFormat: DEFAULT_FORMAT_ID,
       premium: false,
       active: false, // new templates stay off until an admin enables them
       onEmpty: "send-with-fallback" as EmptyPolicy,
-      minArticles: 1,
+      minArticles: MIN_STORIES,
+      selection: { fallbackWindowsHours: [72, 168, 336, 720], excludeSentDays: 30 },
     })),
   ];
 }
@@ -168,12 +195,67 @@ export function sanitizeTemplateInput(
   const topics = Array.isArray(raw.topics)
     ? raw.topics.map((t) => String(t).trim()).filter(Boolean).slice(0, 8)
     : [];
+  // Legacy format ids are accepted and migrated so older admin payloads and
+  // stored docs keep validating.
   const formats = Array.isArray(raw.formats)
-    ? raw.formats.filter((f): f is string => EMAIL_FORMATS.some((item) => item.id === f))
+    ? [...new Set(raw.formats.filter(isKnownFormatId).map(normalizeFormatId))]
     : [];
   if (!formats.length) return { error: "Pick at least one supported format." };
   const onEmpty: EmptyPolicy =
     raw.onEmpty === "skip" || raw.onEmpty === "hold" ? raw.onEmpty : "send-with-fallback";
+
+  const defaultFormat = isKnownFormatId(raw.defaultFormat)
+    ? normalizeFormatId(raw.defaultFormat)
+    : DEFAULT_FORMAT_ID;
+  if (!formats.includes(defaultFormat)) {
+    return { error: "The default format must be one of the supported formats." };
+  }
+
+  const rawSelection = (raw.selection ?? {}) as Record<string, unknown>;
+  const selection: SelectionConfig = {
+    ...(Number(rawSelection.windowHours) > 0
+      ? { windowHours: Math.min(Math.max(Math.floor(Number(rawSelection.windowHours)), 1), 24 * 90) }
+      : {}),
+    ...(Array.isArray(rawSelection.fallbackWindowsHours) && rawSelection.fallbackWindowsHours.length
+      ? {
+          fallbackWindowsHours: rawSelection.fallbackWindowsHours
+            .map((h) => Math.min(Math.max(Math.floor(Number(h)) || 0, 0), 24 * 90))
+            .filter((h) => h > 0)
+            .slice(0, 8),
+        }
+      : {}),
+    crossDeskFallback: rawSelection.crossDeskFallback === true,
+    allowPremium: rawSelection.allowPremium === true,
+    ...(Number(rawSelection.excludeSentDays) > 0
+      ? { excludeSentDays: Math.min(Math.max(Math.floor(Number(rawSelection.excludeSentDays)), 1), 365) }
+      : {}),
+  };
+
+  const rawContent = (raw.content ?? {}) as Record<string, unknown>;
+  const cleanPair = (value: unknown, withAnswer: boolean) => {
+    if (!value || typeof value !== "object") return undefined;
+    const raw2 = value as Record<string, unknown>;
+    const question = String(raw2.question ?? "").trim().slice(0, 200);
+    const options = Array.isArray(raw2.options)
+      ? raw2.options.map((o) => String(o).trim()).filter(Boolean).slice(0, 6)
+      : [];
+    if (!question || options.length < 2) return undefined;
+    const answer = withAnswer
+      ? Math.min(Math.max(Math.floor(Number(raw2.answer)) || 0, 0), options.length - 1)
+      : undefined;
+    return { question, options, ...(answer !== undefined ? { answer } : {}) };
+  };
+  const content: TemplateContent = {
+    marketSnapshot: rawContent.marketSnapshot === true,
+    ...(typeof rawContent.interestingFact === "string" && rawContent.interestingFact.trim()
+      ? { interestingFact: rawContent.interestingFact.trim().slice(0, 300) }
+      : {}),
+    ...(typeof rawContent.editorsNote === "string" && rawContent.editorsNote.trim()
+      ? { editorsNote: rawContent.editorsNote.trim().slice(0, 500) }
+      : {}),
+    ...(cleanPair(rawContent.poll, false) ? { poll: cleanPair(rawContent.poll, false)! } : {}),
+    ...(cleanPair(rawContent.quiz, true) ? { quiz: cleanPair(rawContent.quiz, true)! } : {}),
+  };
 
   return {
     id: String(raw.id ?? slugBase),
@@ -183,11 +265,20 @@ export function sanitizeTemplateInput(
     schedule: { kind, ...(dayOfWeek !== undefined ? { dayOfWeek } : {}), time, timeZone },
     topics,
     ...(typeof raw.deskSlug === "string" && raw.deskSlug ? { deskSlug: raw.deskSlug } : {}),
-    articleCount: Math.min(Math.max(Math.floor(Number(raw.articleCount)) || 6, 1), 12),
+    articleCount: Math.min(
+      Math.max(Math.floor(Number(raw.articleCount)) || DEFAULT_ARTICLE_COUNT, MIN_STORIES),
+      MAX_ARTICLE_COUNT,
+    ),
     formats,
+    defaultFormat,
     premium: raw.premium === true,
     active: raw.active === true,
     onEmpty,
-    minArticles: Math.min(Math.max(Math.floor(Number(raw.minArticles)) || 1, 0), 10),
+    minArticles: Math.min(
+      Math.max(Math.floor(Number(raw.minArticles)) || MIN_STORIES, MIN_STORIES),
+      MAX_ARTICLE_COUNT,
+    ),
+    selection,
+    content,
   };
 }

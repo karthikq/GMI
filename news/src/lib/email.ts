@@ -2,11 +2,16 @@ import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
-import EmailSheet from "@/components/EmailSheets";
-import { EMAIL_SKIN_CSS } from "./emailSkinsCss";
-import { articlesBySlugs, buildIssueLetter, letterFromArticles } from "./issue";
+import EditionEmail from "@/components/email/formats";
+import { RESPONSIVE_CSS } from "@/components/email/shared";
+import { selectEditionArticles } from "./articleSelection";
+import { collections } from "./db";
+import { buildEditionContent, editionPlainText, type EditionContent } from "./editionContent";
+import { articlesBySlugs } from "./issue";
+import { seedTemplates, type LetterTemplate } from "./letterTemplates";
 import type { Newsletter } from "./newsletters";
-import { EMAIL_FORMATS, NEWSLETTERS } from "./newsletters";
+import { NEWSLETTERS } from "./newsletters";
+import { normalizeFormatId } from "./newsletterFormats";
 import type { Plan } from "./plans";
 import { recordDelivery } from "./queries";
 
@@ -135,201 +140,62 @@ function planConfirmHtml(name: string, plan: Plan, siteUrl: string, logoUrl: str
 // the admin dashboard can show it. "skipped" means the local dev no-op.
 export type SendStatus = "sent" | "skipped" | "failed";
 
-// Gmail discards a <style> block once the combined embedded CSS passes
-// 16,384 characters, so each email embeds only its own skin plus the shared
-// footer. Custom properties are resolved to literals because Gmail and
-// Outlook drop declarations containing var(), which would leave the mail unstyled.
-const CSS_VARS: Record<string, string> = {
-  "--paper": "#f5f4f0",
-  "--surface": "#ffffff",
-  "--ink": "#14171c",
-  "--ink-soft": "#4a5059",
-  "--ink-mute": "#7a808a",
-  "--line": "#dcdad3",
-  "--accent": "#c8102e",
-  "--accent-dark": "#9a0c23",
-  "--live": "#d9381e",
-  "--up": "#0f7a4d",
-  "--band": "#eceae4",
-  "--panel": "#14171c",
-  "--font-sans": "Arial, Helvetica, sans-serif",
-  "--font-mono": "'Courier New', Courier, monospace",
-  "--font-display": "Georgia, 'Times New Roman', serif",
-  "--font-heading": "Arial, Helvetica, sans-serif",
-  "--font-geometric": "Arial, Helvetica, sans-serif",
-};
+// ── Edition rendering ─────────────────────────────────────────────────────
+// One rendering service for subscriber previews, admin previews, test sends
+// and real deliveries: EditionContent (articles + optional blocks) → the
+// React format components (table layouts, inline CSS) → static markup.
 
-// flex, grid, clamp(), min()/max(), gap and aspect-ratio are dropped by Gmail
-// and Outlook, collapsing every layout. Downgrade them: flex/grid → block so
-// children stack, clamp/min/max → their first (minimum) value, then restore
-// horizontal rhythm where spans ran together via EMAIL_PATCH.
-const EMAIL_PATCH = `
-.fmt-daily-meta span,.fmt-daily-foot span,.fmt-her-top span,.fmt-her-access span,
-.fmt-sky-top span,.fmt-sky-top i,.fmt-store-head span,.fmt-dig-top span,
-.email-sheet-top span,.email-sheet-bar span,.fmt-corp-kicker span,.fmt-corp-kicker i,
-.fmt-sfoot-links span{display:inline-block;margin-right:14px;vertical-align:middle}
-.email-sheet-foot>div,.fmt-store-foot>div{display:inline-block;margin:0 22px 8px 0;vertical-align:top}
-img{max-width:100%;height:auto}`;
-
-// Gmail discards the ENTIRE <style> block when it meets a selector it can't
-// parse — pseudo-classes/elements (:hover, ::before, :first-child), attribute
-// selectors, the ~ sibling combinator, or non-media at-rules. The skin CSS
-// contains several, so rules are filtered one by one; anything left keeps
-// working instead of taking down the whole stylesheet.
-const UNSAFE_SELECTOR = /[:[\]~]/;
-
-type CssBlock = { selector: string; text: string };
-
-function topLevelBlocks(css: string): CssBlock[] {
-  const blocks: CssBlock[] = [];
-  const n = css.length;
-  let i = 0;
-  while (i < n) {
-    while (i < n && /\s/.test(css[i])) i++;
-    if (css.startsWith("/*", i)) {
-      const end = css.indexOf("*/", i);
-      i = end < 0 ? n : end + 2;
-      continue;
-    }
-    if (i >= n) break;
-    const start = i;
-    let brace = -1;
-    for (let j = i; j < n; j++) {
-      if (css.startsWith("/*", j)) {
-        const end = css.indexOf("*/", j);
-        j = end < 0 ? n - 1 : end + 1;
-        continue;
-      }
-      if (css[j] === "{") {
-        brace = j;
-        break;
-      }
-      if (css[j] === ";") {
-        i = j + 1;
-        break;
-      }
-    }
-    if (brace < 0) break;
-    const selector = css.slice(start, brace).trim();
-    let depth = 1;
-    let j = brace + 1;
-    for (; j < n; j++) {
-      if (css.startsWith("/*", j)) {
-        const end = css.indexOf("*/", j);
-        j = end < 0 ? n - 1 : end + 1;
-        continue;
-      }
-      if (css[j] === "{") depth++;
-      else if (css[j] === "}") {
-        depth--;
-        if (!depth) {
-          j++;
-          break;
-        }
-      }
-    }
-    blocks.push({ selector, text: css.slice(start, j) });
-    i = j;
-  }
-  return blocks;
+// The template behind a letter id — DB doc first, seeded defaults otherwise.
+// Kept local to avoid a deliveryEngine ↔ email import cycle.
+async function templateForLetter(letterId: string): Promise<LetterTemplate | undefined> {
+  try {
+    const doc = await collections.letterTemplates.findOne({ id: letterId });
+    if (doc) return doc as unknown as LetterTemplate;
+  } catch {}
+  return seedTemplates().find((t) => t.id === letterId);
 }
 
-function sanitizeForEmail(css: string): string {
-  const kept: string[] = [];
-  for (const block of topLevelBlocks(css)) {
-    if (block.selector.startsWith("@")) {
-      if (!/^@media\b/i.test(block.selector)) continue;
-      const inner = block.text.slice(block.text.indexOf("{") + 1, block.text.lastIndexOf("}"));
-      const keptInner = sanitizeForEmail(inner);
-      if (keptInner) kept.push(`${block.selector}{${keptInner}}`);
-      continue;
-    }
-    if (!UNSAFE_SELECTOR.test(block.selector)) kept.push(block.text);
-  }
-  return kept.join("\n");
+async function renderEdition(content: EditionContent, format: string, logoSrc?: string, unsubscribeUrl?: string): Promise<string> {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  return renderToStaticMarkup(
+    createElement(EditionEmail, { format: normalizeFormatId(format), c: content, logoSrc, unsubscribeUrl }),
+  );
 }
 
-const SKIN_CSS_PREFIXES: Record<string, string[]> = {
-  daily: [".fmt-sheet", ".fmt-daily", ".fmt-sfoot"],
-  classic: [
-    ".email-sheet",
-    ".email-lead",
-    ".email-cup",
-    ".email-quote",
-    ".email-story",
-    ".email-foot",
-    ".email-cta",
-    ".fmt-sfoot",
-  ],
-  corporate: [".fmt-sheet", ".fmt-corp", ".fmt-sfoot"],
-  heritage: [".fmt-sheet", ".fmt-heritage", ".fmt-her", ".fmt-sfoot"],
-  scrapbook: [".fmt-sheet", ".fmt-scrap", ".fmt-sfoot"],
-  storefront: [".fmt-sheet", ".fmt-store", ".fmt-sfoot"],
-  skyline: [".fmt-sheet", ".fmt-sky", ".fmt-sfoot"],
-  digest: [".fmt-sheet", ".fmt-digest", ".fmt-dig", ".fmt-sfoot"],
-};
-
-function filterCssForSkin(css: string, skin: string): string {
-  const prefixes = SKIN_CSS_PREFIXES[skin] ?? SKIN_CSS_PREFIXES.daily;
-  const kept: string[] = [];
-  for (const block of topLevelBlocks(css)) {
-    if (block.selector.startsWith("@")) {
-      if (!/^@media\b/i.test(block.selector)) continue;
-      const inner = block.text.slice(block.text.indexOf("{") + 1, block.text.lastIndexOf("}"));
-      const keptInner = filterCssForSkin(inner, skin);
-      if (keptInner) kept.push(`${block.selector}{${keptInner}}`);
-      continue;
-    }
-    if (block.selector === "img" || prefixes.some((prefix) => block.selector.includes(prefix))) {
-      kept.push(block.text);
-    }
-  }
-  return kept.join("\n");
+async function editionHtmlDocument(content: EditionContent, format: string, logoSrc: string | undefined, unsubscribeUrl?: string): Promise<string> {
+  const body = await renderEdition(content, format, logoSrc, unsubscribeUrl);
+  return `<!doctype html>
+<html><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>${RESPONSIVE_CSS}</style>
+</head><body style="margin:0;padding:0;background:#E9E7E1">${body}</body></html>`;
 }
 
-const minifiedSkinCss: Record<string, string> = {};
-function emailSkinCss(skin: string): string {
-  if (!minifiedSkinCss[skin]) {
-    const compiled = `${EMAIL_SKIN_CSS}${EMAIL_PATCH}`
-      .replace(/var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)/g, (_match, name, fallback) =>
-        String(CSS_VARS[name as string] ?? fallback ?? "inherit"),
-      )
-      .replace(/clamp\(\s*([^,)]+),[^)]*\)/g, "$1")
-      .replace(/(?:min|max)\(\s*([^,)]+),[^)]*\)/g, "$1")
-      .replace(/display\s*:\s*(?:inline-)?(?:flex|grid)/g, "display:block");
-    minifiedSkinCss[skin] = sanitizeForEmail(filterCssForSkin(compiled, skin))
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\s+/g, " ")
-      .replace(/\s*([{}:;,>])\s*/g, "$1")
-      .trim();
-  }
-  return minifiedSkinCss[skin];
-}
-
-// A delivered newsletter issue: real stories rendered in the format the reader
-// picked on /newsletters. The same EmailSheet skins used by the preview are
-// rendered to static markup and styled by the embedded skin CSS.
+// A delivered newsletter issue: real stories rendered in the format the
+// reader picked on /newsletters.
 async function newsletterIssueHtml(
   letter: Newsletter,
   issueDate: string,
   format: string | undefined,
   logoUrl: string,
   siteUrl: string,
-): Promise<string> {
-  const skin = EMAIL_FORMATS.some((item) => item.id === format) ? String(format) : "daily";
-  const issueLetter = await buildIssueLetter(letter, issueDate, siteUrl);
-  const { renderToStaticMarkup } = await import("react-dom/server");
-  const body = renderToStaticMarkup(
-    createElement(EmailSheet, { format: skin, letter: issueLetter, issueDate, siteUrl }),
-  ).replace(/src="\/logo\.png"/g, `src="${logoUrl}"`);
-  return `<!doctype html>
-<html><head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>${emailSkinCss(skin)}</style>
-</head><body style="margin:0;padding:0;background:#f5f4f0">
-<div style="max-width:640px;margin:0 auto">${body}</div>
-</body></html>`;
+  template?: LetterTemplate,
+): Promise<{ html: string; text: string }> {
+  const resolved = template ?? (await templateForLetter(letter.id));
+  const picks = resolved ? await selectEditionArticles(resolved).catch(() => null) : null;
+  const articles = picks ? await articlesBySlugs(picks.slugs).catch(() => []) : [];
+  const content = await buildEditionContent({
+    letter,
+    editionDate: issueDate,
+    articles,
+    siteUrl,
+    ...(resolved ? { template: resolved } : {}),
+  });
+  return {
+    html: await editionHtmlDocument(content, normalizeFormatId(format), logoUrl),
+    text: editionPlainText(content),
+  };
 }
 
 export type BrevoResult = {
@@ -354,7 +220,7 @@ async function sendViaBrevoDetailed(
   subject: string,
   html: string,
   attachment?: { content: string; name: string }[],
-  extra?: { tags?: string[]; headers?: Record<string, string> },
+  extra?: { tags?: string[]; headers?: Record<string, string>; text?: string },
 ): Promise<BrevoResult> {
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) {
@@ -384,6 +250,7 @@ async function sendViaBrevoDetailed(
         to: [{ email: to, ...(name ? { name } : {}) }],
         subject,
         htmlContent: html,
+        ...(extra?.text ? { textContent: extra.text } : {}),
         ...(attachment ? { attachment } : {}),
         ...(extra?.tags ? { tags: extra.tags } : {}),
         ...(extra?.headers ? { headers: extra.headers } : {}),
@@ -476,13 +343,8 @@ export async function sendNewsletterIssueEmail(
 ): Promise<SendStatus> {
   const siteUrl = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
   const logo = logoForEmail(siteUrl);
-  const status = await sendViaBrevo(
-    to,
-    undefined,
-    `${letter.name} — ${issueDate}`,
-    await newsletterIssueHtml(letter, issueDate, format, logo.src, siteUrl),
-    logo.attachment,
-  );
+  const { html } = await newsletterIssueHtml(letter, issueDate, format, logo.src, siteUrl);
+  const status = await sendViaBrevo(to, undefined, `${letter.name} — ${issueDate}`, html, logo.attachment);
   try {
     await recordDelivery(to, letter.id, status, "issue");
   } catch {}
@@ -524,14 +386,31 @@ export function unsubscribeUrl(email: string, letterId: string): string {
   return `${siteUrl}/unsubscribe?${params}`;
 }
 
-function subscriptionFooterHtml(siteUrl: string, unsubscribe: string): string {
-  return `<div style="max-width:640px;margin:0 auto;padding:18px 24px;font-family:Arial,Helvetica,sans-serif">
-  <p style="margin:0;font-size:11px;line-height:1.6;color:#7a808a">
-    You are receiving this because you subscribed to Good Morning Indian newsletters.
-    <a href="${unsubscribe}" style="color:#c8102e">Unsubscribe from this newsletter</a> ·
-    <a href="${siteUrl}/newsletters" style="color:#c8102e">Manage your newsletters</a>
-  </p>
-</div>`;
+// Renders a stored edition into both the HTML document and its text/plain
+// alternative — shared by real sends and admin previews.
+async function renderEditionBundle(input: {
+  letter: Newsletter;
+  edition: { editionDate: string; articleSlugs: string[] };
+  format?: string;
+  logoUrl: string;
+  siteUrl: string;
+  unsubscribe: string;
+  name?: string;
+  template?: LetterTemplate;
+}): Promise<{ html: string; text: string }> {
+  const articles = await articlesBySlugs(input.edition.articleSlugs).catch(() => []);
+  const content = await buildEditionContent({
+    letter: input.letter,
+    editionDate: input.edition.editionDate,
+    articles,
+    siteUrl: input.siteUrl,
+    ...(input.name ? { name: input.name } : {}),
+    ...(input.template ? { template: input.template } : {}),
+  });
+  return {
+    html: await editionHtmlDocument(content, normalizeFormatId(input.format), input.logoUrl, input.unsubscribe),
+    text: editionPlainText(content, input.unsubscribe),
+  };
 }
 
 // Renders the issue for a frozen edition — the articles stored at generation
@@ -543,23 +422,11 @@ export async function editionIssueHtml(
   logoUrl: string,
   siteUrl: string,
   unsubscribe: string,
+  template?: LetterTemplate,
 ): Promise<string> {
-  const skin = EMAIL_FORMATS.some((item) => item.id === format) ? String(format) : "daily";
-  const articles = await articlesBySlugs(edition.articleSlugs).catch(() => []);
-  const issueLetter = letterFromArticles(letter, articles, edition.editionDate, siteUrl);
-  const { renderToStaticMarkup } = await import("react-dom/server");
-  const body = renderToStaticMarkup(
-    createElement(EmailSheet, { format: skin, letter: issueLetter, issueDate: edition.editionDate, siteUrl }),
-  ).replace(/src="\/logo\.png"/g, `src="${logoUrl}"`);
-  return `<!doctype html>
-<html><head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>${emailSkinCss(skin)}</style>
-</head><body style="margin:0;padding:0;background:#f5f4f0">
-<div style="max-width:640px;margin:0 auto">${body}</div>
-${subscriptionFooterHtml(siteUrl, unsubscribe)}
-</body></html>`;
+  return (
+    await renderEditionBundle({ letter, edition, format, logoUrl, siteUrl, unsubscribe, ...(template ? { template } : {}) })
+  ).html;
 }
 
 // The queue-facing send: renders a stored edition, tags the send with the
@@ -573,18 +440,22 @@ export async function sendEditionEmail(input: {
   format?: string;
   deliveryId: string;
   letterId: string;
+  template?: LetterTemplate;
 }): Promise<BrevoResult> {
   const siteUrl = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
   const logo = logoForEmail(siteUrl);
   const unsubscribe = unsubscribeUrl(input.to, input.letterId);
-  const html = await editionIssueHtml(
-    input.letter,
-    input.edition,
-    input.format,
-    logo.src,
+  const template = input.template ?? (await templateForLetter(input.letterId));
+  const { html, text } = await renderEditionBundle({
+    letter: input.letter,
+    edition: input.edition,
+    format: input.format,
+    logoUrl: logo.src,
     siteUrl,
     unsubscribe,
-  );
+    ...(input.name ? { name: input.name } : {}),
+    ...(template ? { template } : {}),
+  });
   return sendViaBrevoDetailed(
     input.to,
     input.name,
@@ -593,6 +464,7 @@ export async function sendEditionEmail(input: {
     logo.attachment,
     {
       tags: [`delivery:${input.deliveryId}`, `letter:${input.letterId}`],
+      text,
       headers: {
         "List-Unsubscribe": `<${unsubscribe}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",

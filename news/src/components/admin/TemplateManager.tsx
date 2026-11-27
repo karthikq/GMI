@@ -8,7 +8,9 @@ import {
   setLetterTemplateActive,
 } from "@/app/actions";
 import { EMAIL_FORMATS } from "@/lib/newsletters";
-import type { LetterTemplate } from "@/lib/letterTemplates";
+import { MAX_ARTICLE_COUNT, MIN_STORIES } from "@/lib/newsletterFormats";
+import type { LetterTemplate, TemplateContent } from "@/lib/letterTemplates";
+import type { SelectionConfig } from "@/lib/articleSelection";
 import { SCHEDULE_KINDS } from "@/lib/scheduler";
 
 const KIND_LABELS: Record<string, string> = {
@@ -33,11 +35,17 @@ function TemplateEditor({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
+  const [previewFormat, setPreviewFormat] = useState(template.defaultFormat ?? "daily_digest");
+  const [mobile, setMobile] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const patch = (fields: Partial<LetterTemplate>) => setForm((f) => ({ ...f, ...fields }));
   const patchSchedule = (fields: Partial<LetterTemplate["schedule"]>) =>
     setForm((f) => ({ ...f, schedule: { ...f.schedule, ...fields } }));
+  const patchSelection = (fields: Partial<SelectionConfig>) =>
+    setForm((f) => ({ ...f, selection: { ...(f.selection ?? {}), ...fields } }));
+  const patchContent = (fields: Partial<TemplateContent>) =>
+    setForm((f) => ({ ...f, content: { ...(f.content ?? {}), ...fields } }));
 
   const save = () =>
     startTransition(async () => {
@@ -54,16 +62,17 @@ function TemplateEditor({
     startTransition(async () => {
       setError(null);
       setMessage(null);
-      const result = await sendTestLetter({ id: form.id, email });
+      const result = await sendTestLetter({ id: form.id, email, format: previewFormat });
       if ("error" in result) setError(result.error);
       else setMessage(result.message);
     });
   };
 
-  const previewNow = () =>
+  const previewNow = (format: string) =>
     startTransition(async () => {
       setError(null);
-      const result = await previewLetterTemplate({ id: form.id });
+      setPreviewFormat(format as LetterTemplate["defaultFormat"]);
+      const result = await previewLetterTemplate({ id: form.id, format });
       if ("error" in result) setError(result.error);
       else setPreview({ subject: result.subject, html: result.html });
     });
@@ -120,23 +129,64 @@ function TemplateEditor({
           />
         </label>
         <label className="cms-field small">
-          <span>Articles per issue</span>
+          <span>Articles per issue ({MIN_STORIES}–{MAX_ARTICLE_COUNT})</span>
           <input
             type="number"
-            min={1}
-            max={12}
+            min={MIN_STORIES}
+            max={MAX_ARTICLE_COUNT}
             value={form.articleCount}
             onChange={(e) => patch({ articleCount: Number(e.target.value) })}
           />
         </label>
         <label className="cms-field small">
-          <span>Min stories before sending</span>
+          <span>Min stories before flagging</span>
           <input
             type="number"
-            min={0}
-            max={10}
+            min={MIN_STORIES}
+            max={MAX_ARTICLE_COUNT}
             value={form.minArticles}
             onChange={(e) => patch({ minArticles: Number(e.target.value) })}
+          />
+        </label>
+        <label className="cms-field small">
+          <span>Selection window (hours)</span>
+          <input
+            type="number"
+            min={1}
+            max={24 * 90}
+            value={form.selection?.windowHours ?? ""}
+            placeholder="24 daily / 168 weekly"
+            onChange={(e) =>
+              patchSelection({ windowHours: e.target.value ? Number(e.target.value) : undefined })
+            }
+          />
+        </label>
+        <label className="cms-field small">
+          <span>Fallback windows (hours, comma)</span>
+          <input
+            value={(form.selection?.fallbackWindowsHours ?? []).join(", ")}
+            placeholder="48, 168"
+            onChange={(e) =>
+              patchSelection({
+                fallbackWindowsHours: e.target.value
+                  .split(",")
+                  .map((v) => Number(v.trim()))
+                  .filter((v) => Number.isFinite(v) && v > 0),
+              })
+            }
+          />
+        </label>
+        <label className="cms-field small">
+          <span>Re-use articles after (days)</span>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={form.selection?.excludeSentDays ?? ""}
+            placeholder="7"
+            onChange={(e) =>
+              patchSelection({ excludeSentDays: e.target.value ? Number(e.target.value) : undefined })
+            }
           />
         </label>
         <label className="cms-field small">
@@ -184,6 +234,132 @@ function TemplateEditor({
             </label>
           ))}
         </div>
+        <div className="cat-form-flags" style={{ marginTop: 10 }}>
+          <label className="cms-field small">
+            <span>Default format</span>
+            <select
+              value={form.defaultFormat}
+              onChange={(e) => patch({ defaultFormat: e.target.value as LetterTemplate["defaultFormat"] })}
+            >
+              {EMAIL_FORMATS.filter((fmt) => form.formats.includes(fmt.id)).map((fmt) => (
+                <option key={fmt.id} value={fmt.id}>
+                  {fmt.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </fieldset>
+      <div className="cat-form-flags">
+        <label className="cms-switch">
+          <input
+            type="checkbox"
+            checked={form.selection?.crossDeskFallback === true}
+            onChange={(e) => patchSelection({ crossDeskFallback: e.target.checked })}
+          />
+          <span className="switch" aria-hidden="true" />
+          <span>Allow cross-desk fallback</span>
+        </label>
+        <label className="cms-switch">
+          <input
+            type="checkbox"
+            checked={form.selection?.allowPremium === true}
+            onChange={(e) => patchSelection({ allowPremium: e.target.checked })}
+          />
+          <span className="switch" aria-hidden="true" />
+          <span>Include premium stories</span>
+        </label>
+      </div>
+      <fieldset className="cms-field">
+        <span>Optional content blocks (never counted as stories)</span>
+        <div className="cat-form-flags">
+          <label className="cms-switch">
+            <input
+              type="checkbox"
+              checked={form.content?.marketSnapshot === true}
+              onChange={(e) => patchContent({ marketSnapshot: e.target.checked })}
+            />
+            <span className="switch" aria-hidden="true" />
+            <span>Market snapshot</span>
+          </label>
+        </div>
+        <div className="cat-form-flags">
+          <label className="cms-field small">
+            <span>Interesting fact</span>
+            <input
+              value={form.content?.interestingFact ?? ""}
+              placeholder="Shown in the digest when set"
+              onChange={(e) => patchContent({ interestingFact: e.target.value })}
+            />
+          </label>
+          <label className="cms-field small">
+            <span>Editor&apos;s note</span>
+            <input
+              value={form.content?.editorsNote ?? ""}
+              onChange={(e) => patchContent({ editorsNote: e.target.value })}
+            />
+          </label>
+        </div>
+        <div className="cat-form-flags">
+          <label className="cms-field small">
+            <span>Poll question</span>
+            <input
+              value={form.content?.poll?.question ?? ""}
+              onChange={(e) =>
+                patchContent({
+                  poll: {
+                    question: e.target.value,
+                    options: form.content?.poll?.options ?? ["Yes", "No"],
+                  },
+                })
+              }
+            />
+          </label>
+          <label className="cms-field small">
+            <span>Poll options (comma)</span>
+            <input
+              value={(form.content?.poll?.options ?? []).join(", ")}
+              onChange={(e) =>
+                patchContent({
+                  poll: {
+                    question: form.content?.poll?.question ?? "",
+                    options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean),
+                  },
+                })
+              }
+            />
+          </label>
+          <label className="cms-field small">
+            <span>Quiz question</span>
+            <input
+              value={form.content?.quiz?.question ?? ""}
+              onChange={(e) =>
+                patchContent({
+                  quiz: {
+                    question: e.target.value,
+                    options: form.content?.quiz?.options ?? ["A", "B"],
+                    answer: form.content?.quiz?.answer,
+                  },
+                })
+              }
+            />
+          </label>
+          <label className="cms-field small">
+            <span>Quiz options (comma)</span>
+            <input
+              value={(form.content?.quiz?.options ?? []).join(", ")}
+              onChange={(e) =>
+                patchContent({
+                  quiz: {
+                    question: form.content?.quiz?.question ?? "",
+                    options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean),
+                    answer: form.content?.quiz?.answer,
+                  },
+                })
+              }
+            />
+          </label>
+        </div>
       </fieldset>
       <div className="cat-form-flags">
         <label className="cms-switch">
@@ -201,7 +377,7 @@ function TemplateEditor({
         <button type="button" className="button" onClick={save} disabled={pending}>
           Save newsletter
         </button>
-        <button type="button" className="button outline" onClick={previewNow} disabled={pending}>
+        <button type="button" className="button outline" onClick={() => previewNow(previewFormat)} disabled={pending}>
           Preview edition
         </button>
         <button type="button" className="button outline" onClick={testSend} disabled={pending}>
@@ -225,11 +401,45 @@ function TemplateEditor({
         <div className="nc-preview">
           <div className="nc-preview-head">
             <strong>{preview.subject}</strong>
+            <div className="nc-format-picks">
+              {EMAIL_FORMATS.map((fmt) => (
+                <button
+                  key={fmt.id}
+                  type="button"
+                  className={`cat-flag${previewFormat === fmt.id ? " on" : ""}`}
+                  onClick={() => previewNow(fmt.id)}
+                  disabled={pending}
+                >
+                  {fmt.name}
+                </button>
+              ))}
+            </div>
+            <div className="nc-format-picks">
+              <button
+                type="button"
+                className={`cat-flag${!mobile ? " on" : ""}`}
+                onClick={() => setMobile(false)}
+              >
+                Desktop
+              </button>
+              <button
+                type="button"
+                className={`cat-flag${mobile ? " on" : ""}`}
+                onClick={() => setMobile(true)}
+              >
+                Mobile
+              </button>
+            </div>
             <button type="button" className="cat-delete" onClick={() => setPreview(null)}>
               Close preview
             </button>
           </div>
-          <iframe title="Newsletter preview" className="nc-preview-frame" srcDoc={preview.html} />
+          <iframe
+            title="Newsletter preview"
+            className="nc-preview-frame"
+            style={mobile ? { maxWidth: 400 } : undefined}
+            srcDoc={preview.html}
+          />
         </div>
       )}
     </div>
@@ -263,12 +473,13 @@ export default function TemplateManager({
     cadence: "Weekly",
     schedule: { kind: "weekly", dayOfWeek: 1, time: "08:00", timeZone: "Asia/Kolkata" },
     topics: [],
-    articleCount: 6,
-    formats: ["daily"],
+    articleCount: 7,
+    formats: ["daily_digest"],
+    defaultFormat: "daily_digest",
     premium: false,
     active: false,
     onEmpty: "send-with-fallback",
-    minArticles: 1,
+    minArticles: MIN_STORIES,
   });
 
   return (

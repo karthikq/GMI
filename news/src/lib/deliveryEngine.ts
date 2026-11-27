@@ -25,6 +25,13 @@ import {
 } from "./db";
 import { sendEditionEmail } from "./email";
 import { newsletterForTemplate, seedTemplates, type LetterTemplate } from "./letterTemplates";
+import {
+  DEFAULT_FORMAT_ID,
+  isKnownFormatId,
+  normalizeFormatId,
+  normalizeFormatList,
+} from "./newsletterFormats";
+import { selectEditionArticles, requiredArticleCount } from "./articleSelection";
 import { dueSlots, recipientSendAt, GLOBAL_SEND_TIME, type Schedule } from "./scheduler";
 
 export const DEFAULT_TZ = "Asia/Kolkata";
@@ -43,6 +50,19 @@ const workerId = process.env.HOSTNAME || `worker-${randomBytes(3).toString("hex"
 
 // DB templates are authoritative after seeding; the code catalogue fills any
 // gap (fresh dev DB before connect() seeds, or a template deleted by hand).
+// Docs written against the legacy format catalogue keep their ids — migrate
+// them at read time so admins and renders always see current format ids.
+function normalizeTemplate(template: LetterTemplate): LetterTemplate {
+  const formats = normalizeFormatList(template.formats);
+  return {
+    ...template,
+    formats: formats.length ? formats : [DEFAULT_FORMAT_ID],
+    defaultFormat: isKnownFormatId(template.defaultFormat)
+      ? normalizeFormatId(template.defaultFormat)
+      : DEFAULT_FORMAT_ID,
+  };
+}
+
 export async function getTemplates(onlyActive = false): Promise<LetterTemplate[]> {
   await connect();
   const docs = await collections.letterTemplates.find({}).toArray();
@@ -53,7 +73,7 @@ export async function getTemplates(onlyActive = false): Promise<LetterTemplate[]
   const out = [...merged.values()];
   // Drop code-catalogue ids the DB says are inactive, keep admin-created ones.
   return out
-    .map((template) => byId.get(template.id) ?? template)
+    .map((template) => normalizeTemplate(byId.get(template.id) ?? template))
     .filter((template) => (onlyActive ? template.active : true));
 }
 
@@ -73,28 +93,12 @@ function editionDateLabel(localDate: string): string {
   return `${DAY_LONG[date.getUTCDay()].slice(0, 3)}, ${MONTH_SHORT[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
 }
 
-// Freeze the edition's article picks once: the newest published stories on
-// the template's desks. Stored slugs make retries deterministic. Exported
-// for admin previews and test sends.
-export async function pickEditionArticles(template: LetterTemplate): Promise<string[]> {
-  const filter = { publishedAt: { $lte: new Date() } };
-  const projection = { slug: 1, section: 1 };
-  const docs = await collections.articles
-    .find<{ slug: string; section?: string }>(filter, { projection })
-    .sort({ publishedAt: -1 })
-    .limit(300)
-    .toArray();
-  const sectionByName = new Map(
-    (await import("./data")).sections.map((section) => [section.name.toLowerCase(), section.slug]),
-  );
-  const wanted = new Set(
-    (template.deskSlug ? [template.deskSlug] : template.topics.map((t) => sectionByName.get(t.toLowerCase())))
-      .filter((slug): slug is string => Boolean(slug)),
-  );
-  const scoped = docs.filter((doc) => wanted.has(doc.section ?? ""));
-  const rest = docs.filter((doc) => !wanted.has(doc.section ?? ""));
-  // Desks first; general pool fills the remainder so a quiet desk still mails.
-  return [...scoped, ...rest].slice(0, template.articleCount).map((doc) => doc.slug);
+// Freeze the edition's article picks once: the shared selection engine picks
+// the best published stories on the template's desks inside its configured
+// windows. Stored slugs make retries deterministic. Exported for admin
+// previews and test sends.
+export async function pickEditionArticles(template: LetterTemplate) {
+  return selectEditionArticles(template);
 }
 
 async function generateEdition(
@@ -108,17 +112,20 @@ async function generateEdition(
   });
   if (existing) return existing as LetterEditionDoc;
 
-  const slugs = await pickEditionArticles(template);
+  const picks = await selectEditionArticles(template);
+  const slugs = picks.slugs;
+  const required = requiredArticleCount(template);
   const editionDate = editionDateLabel(slot.localDate);
-  const templateDoc = { ...template };
   let status: LetterEditionDoc["status"] = "ready";
   let skipReason: string | undefined;
-  if (slugs.length < template.minArticles) {
-    if (templateDoc.onEmpty === "send-with-fallback") {
-      status = "ready"; // the letter's canned sample fills in — never fabricated
+  let insufficient = false;
+  if (slugs.length < required || picks.insufficient) {
+    insufficient = true;
+    skipReason = picks.reason ?? `Only ${slugs.length} published stories (minimum ${required}).`;
+    if (template.onEmpty === "send-with-fallback") {
+      status = "ready"; // mails what real stories exist — never fabricated
     } else {
       status = template.onEmpty === "hold" ? "hold" : "skipped";
-      skipReason = `Only ${slugs.length} published stories (minimum ${template.minArticles}).`;
     }
   }
 
@@ -133,6 +140,7 @@ async function generateEdition(
     scheduledAt: slot.scheduledAt,
     status,
     ...(skipReason ? { skipReason } : {}),
+    ...(insufficient ? { insufficient } : {}),
     createdAt: now,
   };
   try {
@@ -248,7 +256,7 @@ async function planEditionDeliveries(
           subscriberId: sub._id,
           email: sub.email,
           name: names.get(sub.email) || undefined,
-          format: sub.letterFormats?.[template.id] ?? "daily",
+          format: normalizeFormatId(sub.letterFormats?.[template.id] ?? template.defaultFormat),
           scheduledAt: sendAt,
           status,
           attempts: 0,
@@ -356,9 +364,10 @@ async function sendDelivery(delivery: LetterDeliveryDoc, template: LetterTemplat
       editionDate: edition.editionDate,
       articleSlugs: edition.articleSlugs,
     },
-    format: delivery.format,
+    format: normalizeFormatId(delivery.format),
     deliveryId: String(delivery._id),
     letterId: template.id,
+    template,
   });
 
   const base = { updatedAt: new Date(), lastAttemptAt: now };
