@@ -5,7 +5,8 @@
       "Exec(node)",
       "Exec(./node_modules/.bin/eslint)",
       "Exec(cat)",
-      "Exec(npx eslint)"
+      "Exec(npx eslint)",
+      "Exec(rm)"
     ]
   }
 }
