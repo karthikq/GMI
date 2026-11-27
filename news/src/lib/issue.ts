@@ -48,6 +48,30 @@ export async function buildIssueLetter(
     .filter((slug): slug is string => Boolean(slug));
   const articles = await latestArticles(slugs, limit).catch(() => [] as ArticleDoc[]);
   if (!articles.length) return letter;
+  return letterFromArticles(letter, articles, issueDate, siteUrl);
+}
+
+// Published articles for a frozen edition, in the order they were picked at
+// generation time — retries resend exactly this content.
+export async function articlesBySlugs(slugs: string[]): Promise<ArticleDoc[]> {
+  if (!slugs.length) return [];
+  await connect();
+  const docs = await collections.articles
+    .find<ArticleDoc>({ slug: { $in: slugs } }, { projection: { slug: 1, title: 1, dek: 1, section: 1, image: 1 } })
+    .toArray();
+  const bySlug = new Map(docs.map((doc) => [doc.slug, doc]));
+  return slugs.map((slug) => bySlug.get(slug)).filter((doc): doc is ArticleDoc => Boolean(doc));
+}
+
+// Merge picked articles into a letter's sample — the issue body the email
+// renders. Shared by the live picker and the frozen-edition path.
+export function letterFromArticles(
+  letter: Newsletter,
+  articles: ArticleDoc[],
+  issueDate: string,
+  siteUrl: string,
+): Newsletter {
+  if (!articles.length) return letter;
 
   const stories: SampleStory[] = articles.map((article) => {
     const raw = article.image ?? "";

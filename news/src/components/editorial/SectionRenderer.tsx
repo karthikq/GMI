@@ -54,6 +54,15 @@ export default function SectionRenderer({
               </Link>
             </div>
           )}
+          {!feed.articles.length && page > 1 && (
+            <div className="notice">
+              <h1>That&apos;s everything</h1>
+              <p>There are no more stories in this section.</p>
+              <Link href={basePath} className="button outline">
+                Back to the first page
+              </Link>
+            </div>
+          )}
           {pages > 1 && (
             <nav className="pager" aria-label="Pagination">
               {page > 1 ? (

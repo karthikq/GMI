@@ -1,9 +1,10 @@
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import EmailSheet from "@/components/EmailSheets";
 import { EMAIL_SKIN_CSS } from "./emailSkinsCss";
-import { buildIssueLetter } from "./issue";
+import { articlesBySlugs, buildIssueLetter, letterFromArticles } from "./issue";
 import type { Newsletter } from "./newsletters";
 import { EMAIL_FORMATS, NEWSLETTERS } from "./newsletters";
 import type { Plan } from "./plans";
@@ -331,6 +332,98 @@ async function newsletterIssueHtml(
 </body></html>`;
 }
 
+export type BrevoResult = {
+  // "sent" 2xx with messageId · "failed" definitive rejection · "skipped" no
+  // API key (dev) · "ambiguous" timeout/network failure where the provider
+  // may already hold the message — never auto-resend those.
+  outcome: "sent" | "failed" | "skipped" | "ambiguous";
+  messageId?: string;
+  providerStatus?: number;
+  providerCode?: string;
+  detail?: string;
+  retryable: boolean;
+  retryAfterSec?: number;
+};
+
+// Sends a transactional email via Brevo and reports everything the queue
+// needs: message id for webhooks, Retry-After for rate limits, and a timeout
+// so a hung provider can't stall the scheduler run.
+async function sendViaBrevoDetailed(
+  to: string,
+  name: string | undefined,
+  subject: string,
+  html: string,
+  attachment?: { content: string; name: string }[],
+  extra?: { tags?: string[]; headers?: Record<string, string> },
+): Promise<BrevoResult> {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    console.log(`[email] BREVO_API_KEY not set — skipped "${subject}" to ${to}`);
+    return { outcome: "skipped", detail: "BREVO_API_KEY not configured.", retryable: false };
+  }
+  // EMAIL_DRY_RUN=true renders and records everything but never calls Brevo —
+  // use it for development and smoke tests so no real mail leaves the account.
+  if (process.env.EMAIL_DRY_RUN === "true") {
+    console.log(`[email] dry run — skipped "${subject}" to ${to}`);
+    return { outcome: "skipped", detail: "EMAIL_DRY_RUN", retryable: false };
+  }
+  let response: Response;
+  try {
+    response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: {
+          name: process.env.BREVO_SENDER_NAME ?? "Good Morning Indian",
+          email: process.env.BREVO_SENDER_EMAIL ?? "jskarthik10@gmail.com",
+        },
+        to: [{ email: to, ...(name ? { name } : {}) }],
+        subject,
+        htmlContent: html,
+        ...(attachment ? { attachment } : {}),
+        ...(extra?.tags ? { tags: extra.tags } : {}),
+        ...(extra?.headers ? { headers: extra.headers } : {}),
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    // Timeout or network failure — the request may still have landed. The
+    // caller marks this ambiguous and reconciles instead of resending.
+    return {
+      outcome: "ambiguous",
+      detail: error instanceof Error ? error.message : "network failure",
+      retryable: false,
+    };
+  }
+  const retryAfter = Number(response.headers.get("retry-after"));
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    let code: string | undefined;
+    try {
+      code = JSON.parse(body)?.code;
+    } catch {}
+    const retryable = response.status === 429 || response.status >= 500;
+    console.warn(`[email] "${subject}" to ${to} failed: ${response.status} ${body}`);
+    return {
+      outcome: "failed",
+      providerStatus: response.status,
+      providerCode: code,
+      detail: `Brevo ${response.status}${code ? ` ${code}` : ""}: ${body.slice(0, 200)}`,
+      retryable,
+      retryAfterSec: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+    };
+  }
+  let messageId: string | undefined;
+  try {
+    messageId = (await response.json())?.messageId;
+  } catch {}
+  return { outcome: "sent", messageId, providerStatus: response.status, retryable: false };
+}
+
 // Sends a transactional email via Brevo. No-ops (with a log) when
 // BREVO_API_KEY isn't configured, so local dev doesn't fail.
 async function sendViaBrevo(
@@ -340,34 +433,8 @@ async function sendViaBrevo(
   html: string,
   attachment?: { content: string; name: string }[],
 ): Promise<SendStatus> {
-  const apiKey = process.env.BREVO_API_KEY;
-  if (!apiKey) {
-    console.log(`[email] BREVO_API_KEY not set — skipped "${subject}" to ${to}`);
-    return "skipped";
-  }
-  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key": apiKey,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      sender: {
-        name: process.env.BREVO_SENDER_NAME ?? "Good Morning Indian",
-        email: process.env.BREVO_SENDER_EMAIL ?? "support@goodmorningindian.com",
-      },
-      to: [{ email: to, ...(name ? { name } : {}) }],
-      subject,
-      htmlContent: html,
-      ...(attachment ? { attachment } : {}),
-    }),
-  });
-  if (!response.ok) {
-    console.warn(`[email] "${subject}" to ${to} failed: ${response.status} ${await response.text()}`);
-    return "failed";
-  }
-  return "sent";
+  const result = await sendViaBrevoDetailed(to, name, subject, html, attachment);
+  return result.outcome === "ambiguous" ? "failed" : result.outcome;
 }
 
 // Sends the welcome email via Brevo's transactional API. No-ops (with a log)
@@ -434,5 +501,103 @@ export async function sendPlanConfirmEmail(to: string, name: string, plan: Plan)
     `You're on ${plan.name} — subscription active`,
     planConfirmHtml(name, plan, siteUrl, logo.src),
     logo.attachment,
+  );
+}
+
+// ── Edition sends + unsubscribe links ──────────────────────────────────────
+
+const unsubSecret = () =>
+  process.env.UNSUBSCRIBE_SECRET || process.env.CRON_SECRET || process.env.BREVO_API_KEY || "gmi-dev";
+
+// Signed, unguessable unsubscribe target — no login required. The token binds
+// the address to the letter so a leaked link can't unsubscribe anything else.
+export function unsubscribeToken(email: string, letterId: string): string {
+  return createHmac("sha256", unsubSecret())
+    .update(`${email.toLowerCase()}|${letterId}`)
+    .digest("base64url")
+    .slice(0, 32);
+}
+
+export function unsubscribeUrl(email: string, letterId: string): string {
+  const siteUrl = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const params = new URLSearchParams({ e: email.toLowerCase(), l: letterId, t: unsubscribeToken(email, letterId) });
+  return `${siteUrl}/unsubscribe?${params}`;
+}
+
+function subscriptionFooterHtml(siteUrl: string, unsubscribe: string): string {
+  return `<div style="max-width:640px;margin:0 auto;padding:18px 24px;font-family:Arial,Helvetica,sans-serif">
+  <p style="margin:0;font-size:11px;line-height:1.6;color:#7a808a">
+    You are receiving this because you subscribed to Good Morning Indian newsletters.
+    <a href="${unsubscribe}" style="color:#c8102e">Unsubscribe from this newsletter</a> ·
+    <a href="${siteUrl}/newsletters" style="color:#c8102e">Manage your newsletters</a>
+  </p>
+</div>`;
+}
+
+// Renders the issue for a frozen edition — the articles stored at generation
+// time, never "whatever is newest now". Exported for the admin preview.
+export async function editionIssueHtml(
+  letter: Newsletter,
+  edition: { editionDate: string; articleSlugs: string[] },
+  format: string | undefined,
+  logoUrl: string,
+  siteUrl: string,
+  unsubscribe: string,
+): Promise<string> {
+  const skin = EMAIL_FORMATS.some((item) => item.id === format) ? String(format) : "daily";
+  const articles = await articlesBySlugs(edition.articleSlugs).catch(() => []);
+  const issueLetter = letterFromArticles(letter, articles, edition.editionDate, siteUrl);
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const body = renderToStaticMarkup(
+    createElement(EmailSheet, { format: skin, letter: issueLetter, issueDate: edition.editionDate, siteUrl }),
+  ).replace(/src="\/logo\.png"/g, `src="${logoUrl}"`);
+  return `<!doctype html>
+<html><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>${emailSkinCss(skin)}</style>
+</head><body style="margin:0;padding:0;background:#f5f4f0">
+<div style="max-width:640px;margin:0 auto">${body}</div>
+${subscriptionFooterHtml(siteUrl, unsubscribe)}
+</body></html>`;
+}
+
+// The queue-facing send: renders a stored edition, tags the send with the
+// delivery id (returned verbatim in Brevo webhook events) and attaches
+// List-Unsubscribe headers for client-level opt-out.
+export async function sendEditionEmail(input: {
+  to: string;
+  name?: string;
+  letter: Newsletter;
+  edition: { id: string; editionDate: string; articleSlugs: string[] };
+  format?: string;
+  deliveryId: string;
+  letterId: string;
+}): Promise<BrevoResult> {
+  const siteUrl = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const logo = logoForEmail(siteUrl);
+  const unsubscribe = unsubscribeUrl(input.to, input.letterId);
+  const html = await editionIssueHtml(
+    input.letter,
+    input.edition,
+    input.format,
+    logo.src,
+    siteUrl,
+    unsubscribe,
+  );
+  return sendViaBrevoDetailed(
+    input.to,
+    input.name,
+    `${input.letter.name} — ${input.edition.editionDate}`,
+    html,
+    logo.attachment,
+    {
+      tags: [`delivery:${input.deliveryId}`, `letter:${input.letterId}`],
+      headers: {
+        "List-Unsubscribe": `<${unsubscribe}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "X-Delivery-Id": input.deliveryId,
+      },
+    },
   );
 }

@@ -4,7 +4,8 @@
       "Exec(curl)",
       "Exec(node)",
       "Exec(./node_modules/.bin/eslint)",
-      "Exec(cat)"
+      "Exec(cat)",
+      "Exec(npx eslint)"
     ]
   }
 }

@@ -849,3 +849,208 @@ export async function previewSectionLayout(input: {
     return { error: "Couldn't load the preview." };
   }
 }
+
+// ── Newsletter unsubscribe (public, token-authenticated) ───────────────────
+
+// Validates the HMAC in the List-Unsubscribe link and removes the letter from
+// that address's picks. No session needed — the signed link IS the auth.
+export async function unsubscribeLetter(input: {
+  email: string;
+  letter: string;
+  token: string;
+}): Promise<{ ok: true; message: string } | { error: string }> {
+  const email = String(input.email ?? "").trim().toLowerCase();
+  const letter = String(input.letter ?? "").trim();
+  const token = String(input.token ?? "");
+  if (!email || !letter || !token) return { error: "This unsubscribe link is incomplete." };
+  const { unsubscribeToken } = await import("@/lib/email");
+  if (token !== unsubscribeToken(email, letter)) return { error: "This unsubscribe link is invalid." };
+  try {
+    const result = await setNewsletterSubscription(email, letter, false);
+    if ("error" in result) return result;
+    await collections.auditLog.insertOne({
+      action: "unsubscribe",
+      target: `${email}/${letter}`,
+      detail: "Via List-Unsubscribe link.",
+      at: new Date(),
+    } as never);
+    return { ok: true, message: "You're unsubscribed. No more emails from this newsletter." };
+  } catch {
+    return { error: "Couldn't unsubscribe right now — try again shortly." };
+  }
+}
+
+// ── Newsletter delivery centre (admin/editor) ─────────────────────────────
+
+const newsletterRole = (role?: string) => role === "admin" || role === "editor";
+
+async function recordAudit(user: { id: string; email: string } | null, action: string, target: string, detail?: string) {
+  await collections.auditLog
+    .insertOne({
+      userId: user?.id,
+      userEmail: user?.email,
+      action,
+      target,
+      detail,
+      at: new Date(),
+    } as never)
+    .catch(() => {});
+}
+
+// Save (create or update) a newsletter template.
+export async function saveLetterTemplate(input: unknown): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage newsletters." };
+  const { sanitizeTemplateInput } = await import("@/lib/letterTemplates");
+  const clean = sanitizeTemplateInput(input);
+  if ("error" in clean) return clean;
+  try {
+    const { upsertLetterTemplate } = await import("@/lib/newsletterAdmin");
+    const result = await upsertLetterTemplate(clean);
+    if ("ok" in result) {
+      await recordAudit(user, "template.save", clean.id, clean.name);
+      revalidatePath("/admin/newsletters", "page");
+      revalidatePath("/newsletters", "page");
+    }
+    return result;
+  } catch {
+    return { error: "Couldn't save the newsletter. Try again." };
+  }
+}
+
+export async function setLetterTemplateActive(input: {
+  id: string;
+  active: boolean;
+}): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage newsletters." };
+  try {
+    const { setTemplateActive } = await import("@/lib/newsletterAdmin");
+    const result = await setTemplateActive(String(input.id), Boolean(input.active));
+    if ("ok" in result) {
+      await recordAudit(user, input.active ? "template.activate" : "template.deactivate", String(input.id));
+      revalidatePath("/admin/newsletters", "page");
+      revalidatePath("/newsletters", "page");
+    }
+    return result;
+  } catch {
+    return { error: "Couldn't update the newsletter. Try again." };
+  }
+}
+
+// Rendered preview of the next edition for a template (admin only).
+export async function previewLetterTemplate(input: {
+  id: string;
+}): Promise<{ error: string } | { ok: true; subject: string; html: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage newsletters." };
+  try {
+    const { previewTemplate } = await import("@/lib/newsletterAdmin");
+    return await previewTemplate(String(input.id));
+  } catch {
+    return { error: "Couldn't build the preview." };
+  }
+}
+
+// Send the current draft edition to one authorised test address.
+export async function sendTestLetter(input: {
+  id: string;
+  email: string;
+}): Promise<{ ok: true; message: string } | { error: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage newsletters." };
+  const email = String(input.email ?? "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "Enter a valid test address." };
+  try {
+    const { sendTestEdition } = await import("@/lib/newsletterAdmin");
+    const result = await sendTestEdition(String(input.id), email);
+    if ("ok" in result) await recordAudit(user, "template.test-send", String(input.id), email);
+    return result;
+  } catch {
+    return { error: "Couldn't send the test email." };
+  }
+}
+
+// One delivery → back into the queue.
+export async function retryDelivery(input: {
+  deliveryId: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage deliveries." };
+  try {
+    const { retryDeliveries } = await import("@/lib/deliveryEngine");
+    const { ObjectId } = await import("mongodb");
+    if (!ObjectId.isValid(input.deliveryId)) return { error: "Unknown delivery." };
+    const result = await retryDeliveries({ _id: new ObjectId(input.deliveryId) }, { userId: user?.id });
+    if ("ok" in result) {
+      await recordAudit(user, "delivery.retry", input.deliveryId);
+      revalidatePath("/admin/newsletters", "page");
+    }
+    return result;
+  } catch {
+    return { error: "Couldn't queue the retry." };
+  }
+}
+
+// Every eligible delivery matching a filter — placed into the queue, never
+// sent synchronously from this request.
+export async function retryDeliveriesBulk(input: {
+  editionId?: string;
+  templateId?: string;
+  status?: string;
+  date?: string;
+  email?: string;
+}): Promise<{ ok: true; queued: number } | { error: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors manage deliveries." };
+  try {
+    const { retryDeliveries } = await import("@/lib/deliveryEngine");
+    const { buildDeliveryFilter } = await import("@/lib/newsletterAdmin");
+    const { ObjectId } = await import("mongodb");
+    const filter = buildDeliveryFilter(input);
+    if (input.editionId && ObjectId.isValid(input.editionId)) {
+      filter.editionId = new ObjectId(input.editionId);
+    }
+    const result = await retryDeliveries(filter, { userId: user?.id });
+    if ("ok" in result) {
+      await recordAudit(user, "delivery.bulk-retry", JSON.stringify(input), `${result.queued} queued`);
+      revalidatePath("/admin/newsletters", "page");
+    }
+    return result;
+  } catch {
+    return { error: "Couldn't queue the retries." };
+  }
+}
+
+// "Run scheduler now" — same code path as the cron trigger.
+export async function runSchedulerNow(): Promise<
+  { ok: true; sent: number; failed: number; queued: number; missedMarked: number } | { error: string }
+> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors run the scheduler." };
+  try {
+    const { runSchedulerTick } = await import("@/lib/deliveryEngine");
+    const result = await runSchedulerTick("manual");
+    if ("error" in result) return { error: result.error };
+    await recordAudit(user, "scheduler.run-now", "manual", `${result.sent} sent`);
+    revalidatePath("/admin/newsletters", "page");
+    return { ok: true, sent: result.sent, failed: result.failed, queued: result.queued, missedMarked: result.missedMarked };
+  } catch {
+    return { error: "The scheduler run failed." };
+  }
+}
+
+// Reconciliation: rebuild missing delivery rows without resending anything.
+export async function reconcileDeliveries(): Promise<{ ok: true; created: number } | { error: string }> {
+  const user = await getSessionUser();
+  if (!newsletterRole(user?.role)) return { error: "Only admins and editors reconcile deliveries." };
+  try {
+    const { reconcileNow } = await import("@/lib/deliveryEngine");
+    const result = await reconcileNow();
+    await recordAudit(user, "scheduler.reconcile", "manual", `${result.created} planned`);
+    revalidatePath("/admin/newsletters", "page");
+    return { ok: true, created: result.created };
+  } catch {
+    return { error: "Reconciliation failed." };
+  }
+}

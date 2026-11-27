@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import NewsletterCard from "@/components/NewsletterCard";
 import { PageSkeleton } from "@/components/States";
 import { getSessionUser } from "@/lib/auth";
+import { defaultSendTime } from "@/lib/delivery";
 import { DESK_NEWSLETTERS, FLAGSHIP_NEWSLETTERS } from "@/lib/newsletters";
 import { fetchSubscriberFormats, fetchSubscriberLetters, fetchSubscriberTimes } from "@/lib/queries";
 
@@ -29,6 +30,7 @@ async function Letters() {
       premium={premium}
       initialFormat={formats[letter.id]}
       initialTime={times[letter.id]}
+      defaultTime={defaultSendTime(letter.cadence)}
     />
   );
 

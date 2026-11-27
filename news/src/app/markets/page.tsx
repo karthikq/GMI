@@ -1,22 +1,37 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import ArticleCard from "@/components/ArticleCard";
 import MarketChart from "@/components/MarketChart";
+import SectionRenderer from "@/components/editorial/SectionRenderer";
 import SubsectionNav from "@/components/SubsectionNav";
 import { Offline, PageSkeleton } from "@/components/States";
-import { getCategoryArticles, getMarketViews, getSectionTree, type MarketView } from "@/lib/api";
+import { getMarketViews, getSavedSlugs, getSectionBundle, getSectionTree, type MarketView } from "@/lib/api";
+import { getSessionUser } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Markets" };
 
-async function MarketsContent() {
-  const [markets, tree, stories] = await Promise.all([
+type Props = {
+  searchParams: Promise<{ page?: string }>;
+};
+
+async function MarketsContent({ searchParams }: Props) {
+  const { page: raw } = await searchParams;
+  const page = Math.max(1, parseInt(raw ?? "1", 10) || 1);
+  const [markets, tree, bundle, user] = await Promise.all([
     getMarketViews(),
     getSectionTree(),
-    getCategoryArticles({ sectionSlug: "markets", limit: 8 }),
+    getSectionBundle({ sectionSlug: "markets", page }),
+    getSessionUser(),
   ]);
   if (!markets) return <Offline />;
   const section = tree?.find((item) => item.slug === "markets");
+  const slugs = bundle
+    ? [
+        ...bundle.blocks.flatMap((block) => block.articles.map((article) => article.slug)),
+        ...(bundle.feed?.articles.map((article) => article.slug) ?? []),
+      ]
+    : [];
+  const saved = user && slugs.length ? await getSavedSlugs(user.id, slugs) : null;
 
   return (
     <>
@@ -29,17 +44,14 @@ async function MarketsContent() {
       </header>
       <MarketGroup title="Indices" markets={markets.filter((m) => !m.commodity)} />
       <MarketGroup title="Commodities" markets={markets.filter((m) => m.commodity)} />
-      {stories && stories.articles.length > 0 && (
-        <section className="section-block" aria-labelledby="markets-stories">
-          <div className="section-head">
-            <h2 id="markets-stories">Latest markets stories</h2>
-          </div>
-          <div className="grid">
-            {stories.articles.map((article) => (
-              <ArticleCard key={article.slug} article={article} showSection={false} />
-            ))}
-          </div>
-        </section>
+      {bundle && (
+        <SectionRenderer
+          bundle={bundle}
+          page={page}
+          basePath="/markets"
+          signedIn={Boolean(user)}
+          savedSlugs={new Set(saved ?? [])}
+        />
       )}
     </>
   );
@@ -73,10 +85,10 @@ function MarketGroup({ title, markets }: { title: string; markets: MarketView[] 
   );
 }
 
-export default function MarketsPage() {
+export default function MarketsPage(props: Props) {
   return (
     <Suspense fallback={<PageSkeleton />}>
-      <MarketsContent />
+      <MarketsContent {...props} />
     </Suspense>
   );
 }

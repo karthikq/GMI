@@ -22,6 +22,7 @@ type AccountMenuProps = {
   canViewAnalytics?: boolean;
   canViewSubscribers?: boolean;
   canManageLayouts?: boolean;
+  canManageNewsletters?: boolean;
 };
 
 const SUB_STATUS: Record<string, string> = {
@@ -43,6 +44,7 @@ export default function AccountMenu({
   canViewAnalytics,
   canViewSubscribers,
   canManageLayouts,
+  canManageNewsletters,
 }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
@@ -162,6 +164,16 @@ export default function AccountMenu({
                   onClick={() => setOpen(false)}
                 >
                   Section layouts
+                </Link>
+              )}
+              {canManageNewsletters && (
+                <Link
+                  href="/admin/newsletters"
+                  className="account-menu-item"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                >
+                  Newsletters
                 </Link>
               )}
               {plan && (

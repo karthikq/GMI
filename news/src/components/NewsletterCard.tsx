@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useState, useSyncExternalStore } from "react";
 import { setLetterTime, setNewsletter, subscribeLetter } from "@/app/actions";
 import NewsletterSampleModal from "./NewsletterSampleModal";
-import type { Newsletter } from "@/lib/newsletters";
+import { nextIssueDate, type Newsletter } from "@/lib/newsletters";
 
 function LockIcon({ size = 10 }: { size?: number }) {
   return (
@@ -24,6 +24,7 @@ export default function NewsletterCard({
   premium,
   initialFormat,
   initialTime,
+  defaultTime,
 }: {
   letter: Newsletter;
   subscribed: boolean;
@@ -31,6 +32,9 @@ export default function NewsletterCard({
   premium: boolean;
   initialFormat?: string;
   initialTime?: string;
+  /** The template's own send time ("HH:MM"); shown as the effective time when
+   * the reader hasn't chosen their own. */
+  defaultTime?: string;
 }) {
   const [on, setOn] = useState(subscribed);
   const [busy, setBusy] = useState(false);
@@ -38,6 +42,16 @@ export default function NewsletterCard({
   const [time, setTime] = useState(initialTime ?? "");
   const [showPreview, setShowPreview] = useState(false);
   const [state, action, pending] = useActionState(subscribeLetter, null);
+
+  // The browser's zone is only knowable client-side — read it through a
+  // subscribe-less external store so SSR renders "" and hydration fills it in.
+  const zone = useSyncExternalStore(
+    () => () => {},
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    () => "",
+  );
+
+  const effectiveTime = time || defaultTime || "";
 
   const toggle = async () => {
     setBusy(true);
@@ -80,7 +94,7 @@ export default function NewsletterCard({
           <span>{letter.tagline}</span>
           <span className="letter-cadence">
             {letter.cadence}
-            {time ? ` · ${time}` : ""}
+            {effectiveTime ? ` · ${effectiveTime}` : ""}
           </span>
         </div>
         <h3 className="letter-name">{letter.name}</h3>
@@ -109,19 +123,34 @@ export default function NewsletterCard({
         </button>
 
         {signedIn && on && (
-          <label className="letter-time">
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 3" />
-            </svg>
-            Send at
-            <input
-              type="time"
-              value={time}
-              onChange={(event) => pickTime(event.target.value)}
-              aria-label={`Delivery time for ${letter.name}`}
-            />
-          </label>
+          <div className="letter-time-block">
+            <label className="letter-time">
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 3" />
+              </svg>
+              Send at
+              <input
+                type="time"
+                value={effectiveTime}
+                onChange={(event) => pickTime(event.target.value)}
+                aria-label={`Delivery time for ${letter.name}`}
+              />
+              {time && defaultTime && time !== defaultTime && (
+                <button
+                  type="button"
+                  className="letter-time-reset"
+                  onClick={() => pickTime("")}
+                  title={`Restore the default send time (${defaultTime})`}
+                >
+                  ↺ {defaultTime}
+                </button>
+              )}
+            </label>
+            <p className="letter-time-note">
+              {zone ? `${zone} · ` : ""}Next edition {nextIssueDate(letter.cadence).toLowerCase()}
+            </p>
+          </div>
         )}
 
         {locked && !on && (
