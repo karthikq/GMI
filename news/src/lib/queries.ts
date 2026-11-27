@@ -1435,6 +1435,52 @@ export async function setSubscriberLetterTime(
   return { ok: true };
 }
 
+// The reader's single global delivery time — one "HH:MM" that applies to
+// every newsletter, expressed in timeZone. Null when they use the default.
+export async function fetchSubscriberSendTime(
+  emailField: unknown,
+): Promise<{ time: string | null; timeZone: string | null }> {
+  await connect();
+  await io();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!email) return { time: null, timeZone: null };
+  const doc = await collections.subscribers.findOne(
+    { email },
+    { projection: { sendTime: 1, timeZone: 1 } },
+  );
+  return {
+    time: typeof doc?.sendTime === "string" && doc.sendTime ? doc.sendTime : null,
+    timeZone: typeof doc?.timeZone === "string" && doc.timeZone ? doc.timeZone : null,
+  };
+}
+
+// Stores (or clears, with null) the reader's global delivery time and the
+// IANA zone it's expressed in. Cleared means "back to the default send time".
+export async function setSubscriberSendTime(
+  emailField: unknown,
+  time: string | null,
+  timeZone?: string,
+): Promise<{ ok: true } | { error: string }> {
+  await connect();
+  const email = String(emailField || "").trim().toLowerCase();
+  if (!VALID_EMAIL.test(email)) {
+    return { error: "Enter a valid email address." };
+  }
+  const sets: Record<string, string> = {};
+  if (time) sets.sendTime = time;
+  if (timeZone) sets.timeZone = timeZone;
+  await collections.subscribers.updateOne(
+    { email },
+    {
+      ...(Object.keys(sets).length ? { $set: sets } : {}),
+      ...(!time ? { $unset: { sendTime: "" } } : {}),
+      $setOnInsert: { email, subscribedAt: new Date() },
+    },
+    { upsert: true },
+  );
+  return { ok: true };
+}
+
 // Logs one attempted newsletter email. Called by the email layer after each
 // send so the admin dashboard can show whether a reader actually got it.
 export async function recordDelivery(
@@ -1459,7 +1505,6 @@ export type AdminLetterStatus = {
   id: string;
   name: string;
   cadence: string;
-  time?: string;
   formatName: string;
   // "pending" means no issue was ever recorded for this reader/letter pair;
   // "confirmed" means the subscribe email went out but no issue has yet.
@@ -1471,6 +1516,8 @@ export type AdminSubscriber = {
   email: string;
   name?: string;
   subscribedAt?: string;
+  sendTime?: string;
+  timeZone?: string;
   letters: AdminLetterStatus[];
 };
 
@@ -1505,6 +1552,8 @@ export async function fetchSubscriberDashboard(): Promise<AdminSubscriber[]> {
     email: sub.email,
     name: names.get(sub.email),
     subscribedAt: sub.subscribedAt?.toISOString(),
+    sendTime: sub.sendTime,
+    timeZone: sub.timeZone,
     letters: (Array.isArray(sub.letters) ? sub.letters : [])
       .filter((id): id is string => typeof id === "string")
       .map((id) => {
@@ -1526,7 +1575,7 @@ export async function fetchSubscriberDashboard(): Promise<AdminSubscriber[]> {
           id,
           name: letter?.name ?? id,
           cadence: letter?.cadence ?? "",
-          ...(sub.letterTimes?.[id] ? { time: sub.letterTimes[id] } : {}),
+
           formatName: EMAIL_FORMATS.find((item) => item.id === fmtId)?.name ?? EMAIL_FORMATS[0].name,
           status,
           ...(issue

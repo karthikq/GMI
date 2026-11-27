@@ -25,7 +25,7 @@ import {
 } from "./db";
 import { sendEditionEmail } from "./email";
 import { newsletterForTemplate, seedTemplates, type LetterTemplate } from "./letterTemplates";
-import { dueSlots, recipientSendAt, type Schedule } from "./scheduler";
+import { dueSlots, recipientSendAt, GLOBAL_SEND_TIME, type Schedule } from "./scheduler";
 
 export const DEFAULT_TZ = "Asia/Kolkata";
 const HOUR_MS = 3_600_000;
@@ -156,7 +156,7 @@ type SubscriberRow = {
   _id: ObjectId;
   email: string;
   letters?: string[];
-  letterTimes?: Record<string, string>;
+  sendTime?: string;
   letterFormats?: Record<string, string>;
   timeZone?: string;
 };
@@ -210,9 +210,11 @@ async function planEditionDeliveries(
   const writes = subs.map((sub) => {
     const suppressedHit = suppressed.has(sub.email);
     const premiumBlocked = premiumOk !== null && !premiumOk.has(sub.email);
+    // One global send time for every letter — the reader's own pick or the
+    // 7:30 AM default; the day still comes from the template's schedule.
     const sendAt = recipientSendAt(
       { time: template.schedule.time, timeZone: template.schedule.timeZone },
-      { time: sub.letterTimes?.[template.id], timeZone: sub.timeZone },
+      { time: sub.sendTime ?? GLOBAL_SEND_TIME, timeZone: sub.timeZone },
       slot.localDate,
     );
     const status = suppressedHit

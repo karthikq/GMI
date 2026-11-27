@@ -38,6 +38,7 @@ import {
   setNewsletterSubscription,
   setSubscriberFormat,
   setSubscriberLetterTime,
+  setSubscriberSendTime,
   setCategoryStatus,
   updateArticle,
   updateCategory,
@@ -190,6 +191,29 @@ export async function setLetterTime(
   try {
     if (zone) new Intl.DateTimeFormat("en-US", { timeZone: zone });
     return await setSubscriberLetterTime(user.email, letter, value || null, zone || undefined);
+  } catch {
+    return { error: "Couldn't save your time. Try again." };
+  }
+}
+
+// One delivery time for every newsletter — the reader's own pick or an empty
+// value to restore the default. Time is expressed in the browser's zone.
+export async function setGlobalSendTime(
+  time: string,
+  timeZone?: string,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Sign in to set a delivery time." };
+  const value = String(time ?? "").trim();
+  if (value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    return { error: "Pick a valid time." };
+  }
+  const zone = String(timeZone ?? "").trim();
+  try {
+    if (zone) new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    const result = await setSubscriberSendTime(user.email, value || null, zone || undefined);
+    revalidatePath("/newsletters");
+    return result;
   } catch {
     return { error: "Couldn't save your time. Try again." };
   }

@@ -49,7 +49,6 @@ function letterChip(letter: AdminLetterStatus, email: string) {
         <em>
           {STATUS_LABEL[letter.status]}
           {when}
-          {letter.time ? ` · ${letter.time}` : ""}
           {letter.formatName ? ` · ${letter.formatName}` : ""}
         </em>
         {(letter.status === "pending" || letter.status === "failed") && (
@@ -160,6 +159,7 @@ async function AdminContent({
                   <td>
                     <span className="subs-mail">{sub.email}</span>
                     {sub.name && <span className="subs-name">{sub.name}</span>}
+                    <span className="subs-name">send {sub.sendTime ?? "07:30"}</span>
                   </td>
                   <td className="subs-since">
                     {sub.subscribedAt ? dateFormat.format(new Date(sub.subscribedAt)) : "—"}

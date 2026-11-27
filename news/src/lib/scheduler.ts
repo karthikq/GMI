@@ -15,6 +15,9 @@ export type Schedule = {
 };
 
 export const DEFAULT_TIME_ZONE = "Asia/Kolkata";
+// Every letter goes out at this time on its scheduled day when the reader
+// hasn't picked a global send time of their own.
+export const GLOBAL_SEND_TIME = "07:30";
 export const SCHEDULE_KINDS: ScheduleKind[] = ["daily", "weekdays", "weekly", "trading", "event"];
 
 export const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;

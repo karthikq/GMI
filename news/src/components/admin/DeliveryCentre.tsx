@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { retryDeliveriesBulk, retryDelivery } from "@/app/actions";
+import { retryDeliveriesBulk, retryDelivery, runSchedulerNow } from "@/app/actions";
 import type { DeliveryListRow } from "@/lib/newsletterAdmin";
 
 const RETRYABLE = new Set(["FAILED", "MISSED", "SKIPPED", "UNKNOWN", "DELAYED", "QUEUED"]);
@@ -87,6 +87,18 @@ export default function DeliveryCentre({
       setSelected(new Set());
     });
   };
+
+  const runScheduler = () =>
+    startTransition(async () => {
+      setError(null);
+      setMessage(null);
+      const result = await runSchedulerNow();
+      if ("error" in result) setError(result.error);
+      else
+        setMessage(
+          `Scheduler ran — ${result.sent} sent, ${result.failed} failed, ${result.queued} queued, ${result.missedMarked} missed.`,
+        );
+    });
 
   const retryFiltered = () => {
     if (
@@ -205,6 +217,15 @@ export default function DeliveryCentre({
           <a className="button outline" href={csvHref}>
             Export CSV
           </a>
+          <button
+            type="button"
+            className="button"
+            disabled={pending}
+            onClick={runScheduler}
+            title="Claim queued deliveries and send them now"
+          >
+            {pending ? "Working…" : "Send queued now"}
+          </button>
         </div>
       </div>
       {error && (

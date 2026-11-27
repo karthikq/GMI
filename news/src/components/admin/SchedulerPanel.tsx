@@ -77,23 +77,23 @@ export default function SchedulerPanel({
         </div>
         <div>
           <dt>Heartbeat</dt>
-          <dd>{fmt(heartbeat)}</dd>
+          <dd><span className="nc-val">{fmt(heartbeat)}</span></dd>
         </div>
         <div>
           <dt>Last finished</dt>
-          <dd>{fmt(status.state?.lastRunFinishedAt)}</dd>
+          <dd><span className="nc-val">{fmt(status.state?.lastRunFinishedAt)}</span></dd>
         </div>
         <div>
           <dt>Last status</dt>
-          <dd>{status.state?.lastRunStatus ?? "—"}</dd>
+          <dd><span className="nc-val">{status.state?.lastRunStatus ?? "—"}</span></dd>
         </div>
         <div>
           <dt>Timezone</dt>
-          <dd>{status.state?.timeZone ?? "Asia/Kolkata"}</dd>
+          <dd><span className="nc-val">{status.state?.timeZone ?? "Asia/Kolkata"}</span></dd>
         </div>
         <div>
           <dt>Last webhook</dt>
-          <dd>{fmt(status.lastWebhookAt)}</dd>
+          <dd><span className="nc-val">{fmt(status.lastWebhookAt)}</span></dd>
         </div>
       </dl>
 

@@ -15,27 +15,27 @@ const tz = "Asia/Kolkata";
 const FMTS = ["daily", "classic", "corporate", "heritage", "scrapbook", "storefront", "skyline", "digest"];
 
 const LEGACY = [
-  ["briefing", "The Morning Briefing", "Weekdays before 7am", { kind: "weekdays", time: "07:00", timeZone: tz }, ["World", "Business", "Culture"], false, true],
-  ["pulse", "AI Weekly Pulse", "Every Friday", { kind: "weekly", dayOfWeek: 5, time: "08:00", timeZone: tz }, ["People", "Technology", "Policy", "Business"], true, true],
-  ["markets", "Markets Close", "Weekdays at 6pm", { kind: "weekdays", time: "18:00", timeZone: tz }, ["Indices", "Commodities", "Currencies"], true, true],
-  ["world", "The World Weekly", "Every Sunday", { kind: "weekly", dayOfWeek: 0, time: "08:00", timeZone: tz }, ["World", "Politics", "Economy"], true, true],
-  ["weekend", "Weekend Longform", "Every Saturday", { kind: "weekly", dayOfWeek: 6, time: "08:00", timeZone: tz }, ["Longform", "Culture", "In Pictures"], true, true],
-  ["india", "India This Week", "Every Saturday", { kind: "weekly", dayOfWeek: 6, time: "08:00", timeZone: tz }, ["India", "Politics", "Education"], true, true],
+  ["briefing", "The Morning Briefing", "Weekdays before 7am", { kind: "weekdays", time: "07:30", timeZone: tz }, ["World", "Business", "Culture"], false, true],
+  ["pulse", "AI Weekly Pulse", "Every Friday", { kind: "weekly", dayOfWeek: 5, time: "07:30", timeZone: tz }, ["People", "Technology", "Policy", "Business"], true, true],
+  ["markets", "Markets Close", "Weekdays at 6pm", { kind: "weekdays", time: "07:30", timeZone: tz }, ["Indices", "Commodities", "Currencies"], true, true],
+  ["world", "The World Weekly", "Every Sunday", { kind: "weekly", dayOfWeek: 0, time: "07:30", timeZone: tz }, ["World", "Politics", "Economy"], true, true],
+  ["weekend", "Weekend Longform", "Every Saturday", { kind: "weekly", dayOfWeek: 6, time: "07:30", timeZone: tz }, ["Longform", "Culture", "In Pictures"], true, true],
+  ["india", "India This Week", "Every Saturday", { kind: "weekly", dayOfWeek: 6, time: "07:30", timeZone: tz }, ["India", "Politics", "Education"], true, true],
 ];
 
 const EXTRA = [
-  ["evening", "The Evening Edition", "Daily at 7pm", { kind: "daily", time: "19:00", timeZone: tz }, ["India", "World", "Business"], "The day's story, closed out."],
-  ["markets-open", "Markets Open", "Trading days at 8:30am", { kind: "trading", time: "08:30", timeZone: tz }, ["Markets", "Business", "Economy"], "Pre-open cues before the bell."],
-  ["business-brief", "The Business Brief", "Weekdays at 8am", { kind: "weekdays", time: "08:00", timeZone: tz }, ["Business", "Economy"], "Companies, deals and the economy — every weekday."],
-  ["political-brief", "The Political Brief", "Every Wednesday", { kind: "weekly", dayOfWeek: 3, time: "08:00", timeZone: tz }, ["Politics"], "The week in power and policy."],
-  ["sports-roundup", "The Sports Roundup", "Daily at 8am", { kind: "daily", time: "08:00", timeZone: tz }, ["Sports"], "Scores, fixtures and the stories behind the games."],
-  ["tech-dispatch", "The Tech Dispatch", "Every Tuesday", { kind: "weekly", dayOfWeek: 2, time: "09:00", timeZone: tz }, ["Technology"], "Launches, research and industry moves."],
-  ["cinema-edit", "The Cinema Edit", "Every Friday", { kind: "weekly", dayOfWeek: 5, time: "17:00", timeZone: tz }, ["Entertainment"], "Releases and reviews — for Friday evening."],
-  ["science-journal", "The Science Journal", "Every Thursday", { kind: "weekly", dayOfWeek: 4, time: "09:00", timeZone: tz }, ["Science"], "The week in research, plain-spoken."],
-  ["weekend-escape", "The Weekend Escape", "Every Saturday", { kind: "weekly", dayOfWeek: 6, time: "08:00", timeZone: tz }, ["Travel", "Lifestyle"], "Trips, tables and slow weekends."],
-  ["health-edit", "The Health Edit", "Every Monday", { kind: "weekly", dayOfWeek: 1, time: "08:00", timeZone: tz }, ["Health"], "Medicine and wellness, evidence first."],
-  ["sunday-read", "The Sunday Read", "Every Sunday", { kind: "weekly", dayOfWeek: 0, time: "10:00", timeZone: tz }, ["Longform", "Culture"], "One unhurried morning of the week's best writing."],
-  ["breaking", "Breaking News Alerts", "Event based", { kind: "event", time: "08:00", timeZone: tz }, ["India", "World"], "Only when it can't wait."],
+  ["evening", "The Evening Edition", "Daily at 7pm", { kind: "daily", time: "07:30", timeZone: tz }, ["India", "World", "Business"], "The day's story, closed out."],
+  ["markets-open", "Markets Open", "Trading days at 8:30am", { kind: "trading", time: "07:30", timeZone: tz }, ["Markets", "Business", "Economy"], "Pre-open cues before the bell."],
+  ["business-brief", "The Business Brief", "Weekdays at 8am", { kind: "weekdays", time: "07:30", timeZone: tz }, ["Business", "Economy"], "Companies, deals and the economy — every weekday."],
+  ["political-brief", "The Political Brief", "Every Wednesday", { kind: "weekly", dayOfWeek: 3, time: "07:30", timeZone: tz }, ["Politics"], "The week in power and policy."],
+  ["sports-roundup", "The Sports Roundup", "Daily at 8am", { kind: "daily", time: "07:30", timeZone: tz }, ["Sports"], "Scores, fixtures and the stories behind the games."],
+  ["tech-dispatch", "The Tech Dispatch", "Every Tuesday", { kind: "weekly", dayOfWeek: 2, time: "07:30", timeZone: tz }, ["Technology"], "Launches, research and industry moves."],
+  ["cinema-edit", "The Cinema Edit", "Every Friday", { kind: "weekly", dayOfWeek: 5, time: "07:30", timeZone: tz }, ["Entertainment"], "Releases and reviews — for Friday evening."],
+  ["science-journal", "The Science Journal", "Every Thursday", { kind: "weekly", dayOfWeek: 4, time: "07:30", timeZone: tz }, ["Science"], "The week in research, plain-spoken."],
+  ["weekend-escape", "The Weekend Escape", "Every Saturday", { kind: "weekly", dayOfWeek: 6, time: "07:30", timeZone: tz }, ["Travel", "Lifestyle"], "Trips, tables and slow weekends."],
+  ["health-edit", "The Health Edit", "Every Monday", { kind: "weekly", dayOfWeek: 1, time: "07:30", timeZone: tz }, ["Health"], "Medicine and wellness, evidence first."],
+  ["sunday-read", "The Sunday Read", "Every Sunday", { kind: "weekly", dayOfWeek: 0, time: "07:30", timeZone: tz }, ["Longform", "Culture"], "One unhurried morning of the week's best writing."],
+  ["breaking", "Breaking News Alerts", "Event based", { kind: "event", time: "07:30", timeZone: tz }, ["India", "World"], "Only when it can't wait."],
 ];
 
 const DESK_IDS = [
@@ -86,7 +86,7 @@ try {
           name: id,
           description: "",
           cadence: "Weekly",
-          schedule: { kind: "weekly", dayOfWeek: 1, time: "08:00", timeZone: tz },
+          schedule: { kind: "weekly", dayOfWeek: 1, time: "07:30", timeZone: tz },
           topics: [id],
           deskSlug: id,
           articleCount: 6,

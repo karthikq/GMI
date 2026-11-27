@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
-import MarketChart from "@/components/MarketChart";
+import MarketGroup from "@/components/MarketGroup";
 import SectionRenderer from "@/components/editorial/SectionRenderer";
 import SubsectionNav from "@/components/SubsectionNav";
 import { Offline, PageSkeleton } from "@/components/States";
-import { getMarketViews, getSavedSlugs, getSectionBundle, getSectionTree, type MarketView } from "@/lib/api";
+import { getMarketViews, getSavedSlugs, getSectionBundle, getSectionTree } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Markets" };
@@ -57,33 +56,6 @@ async function MarketsContent({ searchParams }: Props) {
   );
 }
 
-function MarketGroup({ title, markets }: { title: string; markets: MarketView[] }) {
-  if (!markets.length) return null;
-  return (
-    <section className="market-group">
-      <div className="section-head">
-        <h2>{title}</h2>
-      </div>
-      <div className="market-grid">
-        {markets.map((market) => {
-          const up = market.change >= 0;
-          return (
-            <Link key={market.slug} href={`/markets/${market.slug}`} className="market-card">
-              <div className="market-card-head">
-                <span className="market-card-name">{market.name}</span>
-                <span className={up ? "market-change up" : "market-change down"}>
-                  {up ? "▲" : "▼"} {Math.abs(market.change).toFixed(2)}%
-                </span>
-              </div>
-              <strong className="market-card-value">{market.value}</strong>
-              <MarketChart points={market.points} height={90} />
-            </Link>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
 
 export default function MarketsPage(props: Props) {
   return (

@@ -305,12 +305,15 @@ async function Subscribers() {
               <td className="subs-mail">
                 <span className="subs-name">{sub.name ?? sub.email}</span>
                 {sub.name ? <span className="subs-mail-addr">{sub.email}</span> : null}
+                <span className="subs-mail-addr">
+                  {sub.sendTime ?? "07:30"}
+                  {sub.timeZone ? ` ${sub.timeZone}` : ""}
+                </span>
               </td>
               <td className="subs-letters">
                 {sub.letters.map((letter) => (
                   <span key={letter.id} className={`subs-letter status-${letter.status}`}>
                     {letter.name}
-                    {letter.time ? ` · ${letter.time}` : ""}
                     <em>{letter.status}</em>
                   </span>
                 ))}

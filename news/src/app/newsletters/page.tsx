@@ -1,24 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import GlobalSendTime from "@/components/GlobalSendTime";
 import NewsletterCard from "@/components/NewsletterCard";
 import { PageSkeleton } from "@/components/States";
 import { getSessionUser } from "@/lib/auth";
-import { defaultSendTime } from "@/lib/delivery";
 import { DESK_NEWSLETTERS, FLAGSHIP_NEWSLETTERS } from "@/lib/newsletters";
-import { fetchSubscriberFormats, fetchSubscriberLetters, fetchSubscriberTimes } from "@/lib/queries";
+import { fetchSubscriberFormats, fetchSubscriberLetters, fetchSubscriberSendTime } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Newsletters" };
 
 async function Letters() {
   const user = await getSessionUser();
-  const [letterIds, formats, times] = user
+  const [letterIds, formats, sendTime] = user
     ? await Promise.all([
         fetchSubscriberLetters(user.email),
         fetchSubscriberFormats(user.email),
-        fetchSubscriberTimes(user.email),
+        fetchSubscriberSendTime(user.email),
       ])
-    : [[], {} as Record<string, string>, {} as Record<string, string>];
+    : [[], {} as Record<string, string>, { time: null, timeZone: null }];
   const subscribed = new Set(letterIds);
   const premium = user?.plan === "premium" || user?.plan === "premium-plus";
   const card = (letter: (typeof FLAGSHIP_NEWSLETTERS)[number]) => (
@@ -29,8 +29,6 @@ async function Letters() {
       signedIn={Boolean(user)}
       premium={premium}
       initialFormat={formats[letter.id]}
-      initialTime={times[letter.id]}
-      defaultTime={defaultSendTime(letter.cadence)}
     />
   );
 
@@ -43,6 +41,7 @@ async function Letters() {
           Daily and weekly editions from our desks, straight to your inbox. Flagship
           editions are free for every reader; desk editions come with a paid plan.
         </p>
+        <GlobalSendTime initialTime={sendTime.time} signedIn={Boolean(user)} />
       </header>
 
       <div className="letters-grid">{FLAGSHIP_NEWSLETTERS.map(card)}</div>

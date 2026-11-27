@@ -20,6 +20,9 @@ export type SubscriberDoc = {
   letterFormats?: Record<string, string>;
   // Per-letter delivery time overrides the reader picked, keyed by letter id.
   letterTimes?: Record<string, string>;
+  // One global delivery time ("HH:MM") applied to every letter — when set it
+  // wins over letterTimes and the template default.
+  sendTime?: string;
   // Last local date (YYYY-MM-DD) each letter was delivered — dedupes the cron run.
   letterLastSent?: Record<string, string>;
   // IANA zone the reader's letterTimes are expressed in (captured at pick time).

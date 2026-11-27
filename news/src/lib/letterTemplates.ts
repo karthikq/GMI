@@ -45,7 +45,7 @@ function fromConstant(letter: Newsletter): LetterTemplate {
     name: letter.name,
     description: letter.blurb,
     cadence: letter.cadence,
-    schedule: scheduleFromCadence(letter.cadence),
+    schedule: { ...scheduleFromCadence(letter.cadence), time: "07:30" },
     topics: letter.topics,
     articleCount: 6,
     formats: DEFAULT_FORMATS,
@@ -68,18 +68,18 @@ type NewTemplate = {
 };
 
 const EXTRA_TEMPLATES: NewTemplate[] = [
-  { id: "evening", name: "The Evening Edition", cadence: "Daily at 7pm", schedule: { kind: "daily", time: "19:00", timeZone: "Asia/Kolkata" }, topics: ["India", "World", "Business"], blurb: "The day's story, closed out — what happened and what it means tonight." },
-  { id: "markets-open", name: "Markets Open", cadence: "Trading days at 8:30am", schedule: { kind: "trading", time: "08:30", timeZone: "Asia/Kolkata" }, topics: ["Markets", "Business", "Economy"], deskSlug: "markets", blurb: "Pre-open cues, overnight moves and the numbers to watch before the bell." },
-  { id: "business-brief", name: "The Business Brief", cadence: "Weekdays at 8am", schedule: { kind: "weekdays", time: "08:00", timeZone: "Asia/Kolkata" }, topics: ["Business", "Economy"], deskSlug: "business", blurb: "Companies, deals and the economy — every weekday morning." },
-  { id: "political-brief", name: "The Political Brief", cadence: "Every Wednesday", schedule: { kind: "weekly", dayOfWeek: 3, time: "08:00", timeZone: "Asia/Kolkata" }, topics: ["Politics"], deskSlug: "politics", blurb: "The week in power, policy and the people behind both." },
-  { id: "sports-roundup", name: "The Sports Roundup", cadence: "Daily at 8am", schedule: { kind: "daily", time: "08:00", timeZone: "Asia/Kolkata" }, topics: ["Sports"], deskSlug: "sports", blurb: "Scores, fixtures and the stories behind the games — daily." },
-  { id: "tech-dispatch", name: "The Tech Dispatch", cadence: "Every Tuesday", schedule: { kind: "weekly", dayOfWeek: 2, time: "09:00", timeZone: "Asia/Kolkata" }, topics: ["Technology"], deskSlug: "technology", blurb: "Product launches, research and the industry moves that matter." },
-  { id: "cinema-edit", name: "The Cinema Edit", cadence: "Every Friday", schedule: { kind: "weekly", dayOfWeek: 5, time: "17:00", timeZone: "Asia/Kolkata" }, topics: ["Entertainment"], deskSlug: "entertainment", blurb: "Releases, reviews and the week on screen — for Friday evening." },
-  { id: "science-journal", name: "The Science Journal", cadence: "Every Thursday", schedule: { kind: "weekly", dayOfWeek: 4, time: "09:00", timeZone: "Asia/Kolkata" }, topics: ["Science"], deskSlug: "science", blurb: "Peer-reviewed and plain-spoken — the week in research." },
-  { id: "weekend-escape", name: "The Weekend Escape", cadence: "Every Saturday", schedule: { kind: "weekly", dayOfWeek: 6, time: "08:00", timeZone: "Asia/Kolkata" }, topics: ["Travel", "Lifestyle"], deskSlug: "travel", blurb: "Trips, tables and slow weekends — planned by Saturday tea." },
-  { id: "health-edit", name: "The Health Edit", cadence: "Every Monday", schedule: { kind: "weekly", dayOfWeek: 1, time: "08:00", timeZone: "Asia/Kolkata" }, topics: ["Health"], deskSlug: "health", blurb: "Medicine, wellness and evidence you can act on — Mondays." },
-  { id: "sunday-read", name: "The Sunday Read", cadence: "Every Sunday", schedule: { kind: "weekly", dayOfWeek: 0, time: "10:00", timeZone: "Asia/Kolkata" }, topics: ["Longform", "Culture"], blurb: "One unhurried morning of the week's best writing." },
-  { id: "breaking", name: "Breaking News Alerts", cadence: "Event based", schedule: { kind: "event", time: "08:00", timeZone: "Asia/Kolkata" }, topics: ["India", "World"], blurb: "Only when it can't wait — major stories as they break." },
+  { id: "evening", name: "The Evening Edition", cadence: "Daily at 7pm", schedule: { kind: "daily", time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["India", "World", "Business"], blurb: "The day's story, closed out — what happened and what it means tonight." },
+  { id: "markets-open", name: "Markets Open", cadence: "Trading days at 8:30am", schedule: { kind: "trading", time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Markets", "Business", "Economy"], deskSlug: "markets", blurb: "Pre-open cues, overnight moves and the numbers to watch before the bell." },
+  { id: "business-brief", name: "The Business Brief", cadence: "Weekdays at 8am", schedule: { kind: "weekdays", time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Business", "Economy"], deskSlug: "business", blurb: "Companies, deals and the economy — every weekday morning." },
+  { id: "political-brief", name: "The Political Brief", cadence: "Every Wednesday", schedule: { kind: "weekly", dayOfWeek: 3, time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Politics"], deskSlug: "politics", blurb: "The week in power, policy and the people behind both." },
+  { id: "sports-roundup", name: "The Sports Roundup", cadence: "Daily at 8am", schedule: { kind: "daily", time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Sports"], deskSlug: "sports", blurb: "Scores, fixtures and the stories behind the games — daily." },
+  { id: "tech-dispatch", name: "The Tech Dispatch", cadence: "Every Tuesday", schedule: { kind: "weekly", dayOfWeek: 2, time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Technology"], deskSlug: "technology", blurb: "Product launches, research and the industry moves that matter." },
+  { id: "cinema-edit", name: "The Cinema Edit", cadence: "Every Friday", schedule: { kind: "weekly", dayOfWeek: 5, time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Entertainment"], deskSlug: "entertainment", blurb: "Releases, reviews and the week on screen — for Friday evening." },
+  { id: "science-journal", name: "The Science Journal", cadence: "Every Thursday", schedule: { kind: "weekly", dayOfWeek: 4, time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Science"], deskSlug: "science", blurb: "Peer-reviewed and plain-spoken — the week in research." },
+  { id: "weekend-escape", name: "The Weekend Escape", cadence: "Every Saturday", schedule: { kind: "weekly", dayOfWeek: 6, time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Travel", "Lifestyle"], deskSlug: "travel", blurb: "Trips, tables and slow weekends — planned by Saturday tea." },
+  { id: "health-edit", name: "The Health Edit", cadence: "Every Monday", schedule: { kind: "weekly", dayOfWeek: 1, time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Health"], deskSlug: "health", blurb: "Medicine, wellness and evidence you can act on — Mondays." },
+  { id: "sunday-read", name: "The Sunday Read", cadence: "Every Sunday", schedule: { kind: "weekly", dayOfWeek: 0, time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["Longform", "Culture"], blurb: "One unhurried morning of the week's best writing." },
+  { id: "breaking", name: "Breaking News Alerts", cadence: "Event based", schedule: { kind: "event", time: "07:30", timeZone: "Asia/Kolkata" }, topics: ["India", "World"], blurb: "Only when it can't wait — major stories as they break." },
 ];
 
 export const EXTRA_TEMPLATE_IDS = new Set(EXTRA_TEMPLATES.map((t) => t.id));
