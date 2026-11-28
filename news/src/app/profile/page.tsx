@@ -101,9 +101,11 @@ async function ProfileContent() {
           : user.googleId
             ? "Google account"
             : "Reader account",
-        bio: user.googleId
-          ? "Signed in with your Google account."
-          : "Signed in with your email and password.",
+        bio:
+          user.bio ??
+          (user.googleId
+            ? "Signed in with your Google account."
+            : "Signed in with your email and password."),
       }
     : reader;
 

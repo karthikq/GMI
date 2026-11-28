@@ -1986,3 +1986,184 @@ export async function fetchSectionBundle(params: {
       : null,
   };
 }
+
+// ── Public author profiles (/author/[slug]) ────────────────────────────────
+// Authors resolve from either a users document (username or slugified name)
+// or a byline `author` string on articles. Only public-safe fields are read:
+// `user.profile` — an explicit, opt-in public block — plus article-derived
+// fallbacks. The login `email` is never exposed.
+
+// "Priya Nair" → "priya-nair" — the slug used in /author/ URLs and bylines.
+export function authorSlug(name: string): string {
+  return String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+export type AuthorProfile = {
+  slug: string;
+  name: string;
+  designation?: string;
+  desk?: string;
+  location?: string;
+  email?: string; // public professional address only
+  bio?: string;
+  experience?: string;
+  expertise: string[];
+  languages: string[];
+  photo?: string;
+  articleCount: number;
+  totalViews?: number;
+  since?: number;
+};
+
+export type AuthorSort = "latest" | "popular";
+
+type UserProfileBlock = {
+  title?: string;
+  designation?: string;
+  desk?: string;
+  location?: string;
+  email?: string;
+  publicEmail?: string;
+  bio?: string;
+  experience?: string;
+  expertise?: unknown;
+  languages?: unknown;
+  photo?: string;
+};
+
+const str = (value: unknown, max = 300): string | undefined => {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text ? text.slice(0, max) : undefined;
+};
+
+const strList = (value: unknown, max = 12): string[] =>
+  Array.isArray(value)
+    ? value.map((item) => str(item, 60)).filter((item): item is string => Boolean(item)).slice(0, max)
+    : [];
+
+// Resolves a slug to { name, authorId? }. Tries users.username first, then
+// slugified user names, then distinct article bylines — covering writers
+// whose stories carry a name but no linked account.
+async function resolveAuthor(slug: string): Promise<{ name: string; authorId?: string } | null> {
+  const user = await collections.users.findOne(
+    { username: { $regex: `^${escapeRegex(slug)}$`, $options: "i" } },
+    { projection: { name: 1 } },
+  );
+  if (user?.name) return { name: String(user.name), authorId: String(user._id) };
+
+  const bylines = (await collections.articles.distinct("author", PUBLISHED())) as string[];
+  const hit = bylines.find((name) => authorSlug(name) === slug);
+  if (!hit) return null;
+  const sample = await collections.articles.findOne(
+    { ...PUBLISHED(), author: hit },
+    { projection: { authorId: 1 }, sort: { publishedAt: -1 } },
+  );
+  const authorId = sample?.authorId && ObjectId.isValid(sample.authorId) ? sample.authorId : undefined;
+  // If a user owns the byline name (same name or username), prefer the linked
+  // account so profile fields resolve.
+  if (!authorId) {
+    const named = await collections.users.findOne(
+      { name: { $regex: `^${escapeRegex(hit)}$`, $options: "i" } },
+      { projection: { name: 1 } },
+    );
+    if (named) return { name: hit, authorId: String(named._id) };
+  }
+  return { name: hit, ...(authorId ? { authorId } : {}) };
+}
+
+// Articles belong to the author via `authorId` when it exists, else the
+// byline string (authorId match still preferred inside that name).
+function authorFilter(author: { name: string; authorId?: string }) {
+  return author.authorId
+    ? { $or: [{ authorId: author.authorId }, { author: author.name }] }
+    : { author: author.name };
+}
+
+export async function fetchAuthorPage(
+  slug: string,
+  opts: { page?: number; sort?: AuthorSort; pageSize?: number },
+): Promise<{ profile: AuthorProfile; total: number; pages: number; articles: Article[] } | null> {
+  await connect();
+  await io();
+  const author = await resolveAuthor(slug);
+  if (!author) return null;
+
+  const page = Math.max(1, Math.floor(opts.page ?? 1));
+  const pageSize = Math.min(Math.max(Math.floor(opts.pageSize ?? 12), 1), 50);
+  const sort: AuthorSort = opts.sort === "popular" ? "popular" : "latest";
+  const filter = { ...PUBLISHED(), ...authorFilter(author) };
+
+  const [maps, user, total, docs, stats] = await Promise.all([
+    categoryMaps(),
+    author.authorId && ObjectId.isValid(author.authorId)
+      ? collections.users.findOne({ _id: new ObjectId(author.authorId) })
+      : Promise.resolve(null),
+    collections.articles.countDocuments(filter),
+    collections.articles
+      .find(filter, LIST)
+      .sort(sort === "popular" ? { views: -1, publishedAt: -1 } : { publishedAt: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .toArray(),
+    collections.articles
+      .aggregate<{ totalViews: number; since: Date }>([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            totalViews: { $sum: { $ifNull: ["$views", 0] } },
+            since: { $min: "$publishedAt" },
+          },
+        },
+      ])
+      .toArray(),
+  ]);
+
+  const block = (user?.profile ?? {}) as UserProfileBlock;
+  const articles = (docs as unknown as StoredArticle[]).map((a) => present(a, maps));
+  const views = stats[0]?.totalViews;
+  const since = stats[0]?.since;
+  // Desk fallback: the section the writer files most often.
+  const desk = str(block.desk) ?? (() => {
+    const counts = new Map<string, number>();
+    for (const doc of docs as unknown as StoredArticle[]) {
+      counts.set(doc.section, (counts.get(doc.section) ?? 0) + 1);
+    }
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    return top ? maps.names.get(top[0]) ?? top[0] : undefined;
+  })();
+  const location =
+    str(block.location) ??
+    ([str(user?.state), str(user?.country)].filter(Boolean).join(", ") || undefined);
+  const photo = str(block.photo) ??
+    (user && user.avatar !== "none" ? str(user.avatar) ?? str(user.picture) : undefined);
+
+  return {
+    profile: {
+      slug,
+      name: author.name,
+      ...(str(block.designation) || str(block.title)
+        ? { designation: str(block.designation) ?? str(block.title) }
+        : {}),
+      ...(desk ? { desk } : {}),
+      ...(location ? { location } : {}),
+      // Only the explicitly public address — never the account login email.
+      ...(str(block.publicEmail) || str(block.email) ? { email: str(block.publicEmail) ?? str(block.email) } : {}),
+      ...(str(block.bio, 1200) ? { bio: str(block.bio, 1200) } : {}),
+      ...(str(block.experience, 1200) ? { experience: str(block.experience, 1200) } : {}),
+      expertise: strList(block.expertise),
+      languages: strList(block.languages),
+      ...(photo ? { photo } : {}),
+      articleCount: total,
+      ...(views ? { totalViews: views } : {}),
+      ...(since ? { since: new Date(since).getFullYear() } : {}),
+    },
+    total,
+    pages: Math.max(1, Math.ceil(total / pageSize)),
+    articles,
+  };
+}

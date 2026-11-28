@@ -52,6 +52,7 @@ export default function EditProfileForm({
   gender,
   country,
   state,
+  bio,
   avatar,
   picture,
 }: {
@@ -60,6 +61,7 @@ export default function EditProfileForm({
   gender?: string;
   country?: string;
   state?: string;
+  bio?: string;
   avatar?: string;
   picture?: string;
 }) {
@@ -70,6 +72,7 @@ export default function EditProfileForm({
   const [nextGender, setNextGender] = useState(gender ?? "");
   const [nextCountry, setNextCountry] = useState(country ?? DEFAULT_COUNTRY);
   const [nextState, setNextState] = useState(state ?? "");
+  const [nextAbout, setNextAbout] = useState(bio ?? "");
   const [preview, setPreview] = useState<string | null>(null);
   const [nextFile, setNextFile] = useState<File | null>(null);
   const [nextPhoto, setNextPhoto] = useState<string | null>(null);
@@ -164,6 +167,7 @@ export default function EditProfileForm({
         gender: nextGender,
         country: nextCountry,
         state: nextState,
+        about: nextAbout,
         ...(photo
           ? { avatar: photo }
           : photoChoice === "google"
@@ -285,6 +289,16 @@ export default function EditProfileForm({
               maxLength={80}
               autoComplete="nickname"
               onChange={(e) => setNextName(e.target.value)}
+            />
+          </label>
+          <label className="cms-field wide">
+            <span className="cms-label">About</span>
+            <textarea
+              value={nextAbout}
+              maxLength={600}
+              rows={3}
+              placeholder="A short bio shown on your profile and author page."
+              onChange={(e) => setNextAbout(e.target.value)}
             />
           </label>
           <label className="cms-field">

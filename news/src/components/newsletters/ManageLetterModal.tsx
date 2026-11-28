@@ -77,6 +77,7 @@ export default function ManageLetterModal({
     <>
       <Modal label={`${letter.name} — Manage`} onClose={onClose}>
         <div className="nl-manage">
+          <h2 className="nl-manage-title">{letter.name}</h2>
           <p className="nl-manage-desc">{letter.blurb}</p>
           <dl className="nl-manage-rows">
             {rows.map((row) => (

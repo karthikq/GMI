@@ -18,6 +18,9 @@ export type SessionUser = {
   state?: string;
   picture?: string;
   avatar?: string;
+  // Optional public biography, stored under `profile.bio` and surfaced on the
+  // reader profile and public author pages.
+  bio?: string;
   googleId?: string;
   // False for accounts created through Google — they have no local password.
   hasPassword: boolean;
@@ -56,6 +59,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       state: user.state,
       picture: user.picture,
       avatar: user.avatar,
+      bio: typeof user.profile?.bio === "string" ? user.profile.bio : undefined,
       googleId: user.googleId,
       hasPassword: Boolean(user.passwordHash),
       passwordChangedAt: user.passwordChangedAt,

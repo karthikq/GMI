@@ -20,6 +20,7 @@ async function EditProfileContent() {
         gender={user.gender}
         country={user.country}
         state={user.state}
+        bio={user.bio}
         avatar={user.avatar}
         picture={user.picture}
       />

@@ -12,6 +12,7 @@ import ShareButtons from "@/components/ShareButtons";
 import { PageSkeleton } from "@/components/States";
 import { getArticle } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth";
+import { authorSlug } from "@/lib/queries";
 import { isBookmarked } from "@/lib/reading";
 
 type Props = {
@@ -96,7 +97,9 @@ async function ArticleContent({ params, searchParams }: Props) {
               {initials(article.author)}
             </span>
             <div className="by-info">
-              <p className="by-name">By {article.author}</p>
+              <p className="by-name">
+                By <Link href={`/author/${authorSlug(article.author)}`}>{article.author}</Link>
+              </p>
               <p className="by-meta">
                 {article.authorRole && <>{article.authorRole} · </>}
                 <time dateTime={article.publishedAt}>
@@ -195,7 +198,9 @@ async function ArticleContent({ params, searchParams }: Props) {
               </span>
               <div>
                 <span className="kicker">About the author</span>
-                <h3>{article.author}</h3>
+                <h3>
+                  <Link href={`/author/${authorSlug(article.author)}`}>{article.author}</Link>
+                </h3>
                 <p>{article.authorBio}</p>
               </div>
             </aside>

@@ -678,6 +678,7 @@ export async function updateProfile(input: {
   gender?: string;
   country?: string;
   state?: string;
+  about?: string;
   avatar?: string;
 }): Promise<{ message: string } | void> {
   const user = await getSessionUser();
@@ -740,6 +741,20 @@ export async function updateProfile(input: {
       return { message: "Choose a valid state." };
     } else {
       update.state = state;
+    }
+  }
+
+  // Short "About" text is public: it feeds the reader profile and the
+  // /author/[slug] page, so it's stored under profile.bio — never the login
+  // document's private fields.
+  if (typeof input.about === "string") {
+    const about = input.about.trim();
+    if (!about) {
+      unset["profile.bio"] = "";
+    } else if (about.length > 600) {
+      return { message: "Keep your about text under 600 characters." };
+    } else {
+      update["profile.bio"] = about;
     }
   }
 
